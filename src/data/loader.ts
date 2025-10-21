@@ -1,6 +1,6 @@
 import { openDB } from 'idb';
 import { Vulnerability } from './types';
-import workerUrl from '../worker/jsonStreamer.worker?worker&url';
+import workerUrl from '../workers/jsonStreamer.worker?worker&url';
 
 const DB_NAME = 'vuln-db';
 const STORE = 'vulns';
@@ -27,13 +27,10 @@ export async function streamIntoDB(url: string){
     worker.onmessage = async (e) => {
       const msg = e.data;
       if (msg.type === 'chunk') {
-        batch.push(...msg.items);
-        if (batch.length > 5000) {
-          const tx = db.transaction(STORE, 'readwrite');
-          for(const item of batch) await tx.store.put(item);
-          await tx.done;
-          batch = [];
-        }
+        //console.log('Received chunk:', msg.items.length);
+        const tx = db.transaction(STORE, 'readwrite');
+        for (const item of msg.items) await tx.store.put(item);
+        await tx.done;
       } else if (msg.type === 'done') {
         if (batch.length) {
           const tx = db.transaction(STORE, 'readwrite');
