@@ -51,4 +51,5 @@ security-vuln-dashboard/
 └─ ...
 ```
 
-This boilerplate provides a minimal starting point. Implement loading, parsing, filtering, and visualization logic in the respective files.
+Used Redux over for more control over the data flow
+If this dataset were served from an API, I’d switch to React Query to handle caching and background updates, while keeping Redux for UI filters.
