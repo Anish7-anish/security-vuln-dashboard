@@ -1,0 +1,57 @@
+import { openDB } from 'idb';
+import { Vulnerability } from './types';
+import workerUrl from '../worker/jsonStreamer.worker?worker&url';
+
+const DB_NAME = 'vuln-db';
+const STORE = 'vulns';
+
+export async function ensureDB() {
+  return openDB(DB_NAME, 1, {
+    upgrade(db) {
+      const store = db.createObjectStore(STORE, { keyPath: 'id' });
+      store.createIndex('severity', 'severity');
+      store.createIndex('kaiStatus', 'kaiStatus');
+      store.createIndex('groupName','groupName');
+      store.createIndex('repoName', 'repoName');
+      store.createIndex('imageName', 'imageName');
+    },
+  });
+}
+
+export async function streamIntoDB(url: string){
+  const db = await ensureDB();
+  const worker = new Worker(workerUrl, {type: 'module'});
+  let batch: Vulnerability[] = [];
+
+  return new Promise<void>((resolve, reject) => {
+    worker.onmessage = async (e) => {
+      const msg = e.data;
+      if (msg.type === 'chunk') {
+        batch.push(...msg.items);
+        if (batch.length > 5000) {
+          const tx = db.transaction(STORE, 'readwrite');
+          for(const item of batch) await tx.store.put(item);
+          await tx.done;
+          batch = [];
+        }
+      } else if (msg.type === 'done') {
+        if (batch.length) {
+          const tx = db.transaction(STORE, 'readwrite');
+          for (const item of batch) await tx.store.put(item);
+          await tx.done;
+        }
+        worker.terminate();
+        resolve();
+      } else if (msg.type === 'error') {
+        worker.terminate();
+        reject(new Error(msg.error));
+      }
+    };
+    worker.postMessage({ url });
+  });
+}
+
+export async function getAllVulnerabilities(): Promise<Vulnerability[]> {
+  const db = await ensureDB();
+  return (await db.getAll(STORE)) as Vulnerability[];
+}
