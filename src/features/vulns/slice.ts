@@ -1,96 +1,56 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { Vulnerability } from '../../data/types';
 
-export type KaiStatus = 'invalid - norisk' | 'ai-invalid-norisk' | string;
-
-export interface Vulnerability {
-  id: string;
-  package: string;
-  version?: string;
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN' | string;
-  cvssScore?: number;
-  publishedAt?: string;
-  updatedAt?: string;
-  riskFactors?: string[];
-  kaiStatus?: KaiStatus;
-  summary?: string;
-  references?: string[];
-  [k: string]: unknown;
+interface VulnState {
+  all: Vulnerability[];
+  filtered: Vulnerability[];
+  kaiExclude: string[];
+  query: string;
 }
 
-export interface FilterState {
-  severities: Set<string>;
-  kaiExclude: Set<string>;
-  riskFactors: Set<string>;
-  q: string;
-  dateRange?: [number, number];
-}
-
-const initialState: FilterState = {
-  severities: new Set(),
-  kaiExclude: new Set(),
-  riskFactors: new Set(),
-  q: '',
+const initialState: VulnState = {
+  all: [],
+  filtered: [],
+  kaiExclude: [],
+  query: '',
 };
 
-const vulnsSlice = createSlice({
+const vulnSlice = createSlice({
   name: 'vulns',
   initialState,
   reducers: {
-    setQuery(state, action: PayloadAction<string>) {
-      state.q = action.payload;
+    setData: (state, action: PayloadAction<Vulnerability[]>) => {
+      state.all = action.payload;
+      state.filtered = action.payload;
     },
-    toggleSeverity(state, action: PayloadAction<string>) {
-      const v = action.payload;
-      if (state.severities.has(v)) {
-        state.severities.delete(v);
-      } else {
-        state.severities.add(v);
-      }
+
+    setQuery: (state, action: PayloadAction<string>) => {
+      const query = action.payload.toLowerCase();
+      state.query = action.payload;
+
+      // ✅ Type narrowing ensures v is Vulnerability
+      const all: Vulnerability[] = Array.isArray(state.all)
+        ? (state.all as Vulnerability[])
+        : [];
+
+      state.filtered = all.filter((v) =>
+        (v.cve ?? '').toLowerCase().includes(query),
+      );
     },
-    toggleRisk(state, action: PayloadAction<string>) {
-      const v = action.payload;
-      if (state.riskFactors.has(v)) {
-        state.riskFactors.delete(v);
-      } else {
-        state.riskFactors.add(v);
-      }
-    },
-    setDateRange(state, action: PayloadAction<[number, number] | undefined>) {
-      state.dateRange = action.payload;
-    },
-    clearAllFilters(state) {
-      state.severities.clear();
-      state.riskFactors.clear();
-      state.kaiExclude.clear();
-      state.q = '';
-      state.dateRange = undefined;
-    },
-    applyManualAnalysis(state) {
-      state.kaiExclude.add('invalid - norisk');
-    },
-    applyAIAnalysis(state) {
-      state.kaiExclude.add('ai-invalid-norisk');
-    },
-    toggleKaiExclude(state, action: PayloadAction<string>) {
-      const v = action.payload;
-      if (state.kaiExclude.has(v)) {
-        state.kaiExclude.delete(v);
-      } else {
-        state.kaiExclude.add(v);
-      }
-    },
+
+    toggleKaiFilter(state, action: PayloadAction<string>) {
+    const status = action.payload;
+    if (state.kaiExclude.includes(status)) {
+      state.kaiExclude = state.kaiExclude.filter((s) => s !== status);
+    } else {
+      state.kaiExclude.push(status);
+    }
+    state.filtered = state.all.filter(
+      (x) => !state.kaiExclude.includes(x.kaiStatus || '')
+    );
+},
   },
 });
 
-export const {
-  setQuery,
-  toggleSeverity,
-  toggleRisk,
-  setDateRange,
-  clearAllFilters,
-  applyManualAnalysis,
-  applyAIAnalysis,
-  toggleKaiExclude,
-} = vulnsSlice.actions;
-
-export default vulnsSlice.reducer;
+export const { setData, setQuery, toggleKaiFilter } = vulnSlice.actions;
+export default vulnSlice.reducer;
