@@ -4,14 +4,14 @@ import { Vulnerability } from '../../data/types';
 interface VulnState {
   all: Vulnerability[];
   filtered: Vulnerability[];
-  kaiExclude: Set<string>;
+  kaiExclude: string[];
   query: string;
 }
 
 const initialState: VulnState = {
   all: [],
   filtered: [],
-  kaiExclude: new Set(),
+  kaiExclude: [],
   query: '',
 };
 
@@ -38,23 +38,17 @@ const vulnSlice = createSlice({
       );
     },
 
-    toggleKaiFilter: (state, action: PayloadAction<string>) => {
-      const status = action.payload;
-
-      if (state.kaiExclude.has(status)) {
-        state.kaiExclude.delete(status);
-      } else {
-        state.kaiExclude.add(status);
-      }
-
-      const all: Vulnerability[] = Array.isArray(state.all)
-        ? (state.all as Vulnerability[])
-        : [];
-
-      state.filtered = all.filter(
-        (v) => !state.kaiExclude.has(v.kaiStatus ?? ''),
-      );
-    },
+    toggleKaiFilter(state, action: PayloadAction<string>) {
+    const status = action.payload;
+    if (state.kaiExclude.includes(status)) {
+      state.kaiExclude = state.kaiExclude.filter((s) => s !== status);
+    } else {
+      state.kaiExclude.push(status);
+    }
+    state.filtered = state.all.filter(
+      (x) => !state.kaiExclude.includes(x.kaiStatus || '')
+    );
+},
   },
 });
 
