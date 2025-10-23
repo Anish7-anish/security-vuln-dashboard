@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Layout, Row, Col, Card, Typography, Spin } from 'antd';
 import { streamIntoDB, getAllVulnerabilities } from '../data/loader';
@@ -6,7 +6,18 @@ import { setData } from '../features/vulns/slice';
 import { RootState } from '../app/store';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
-import { SeverityChart } from '../components/Charts';
+import {
+  SeverityChart,
+  RiskFactorChart,
+  TrendChart,
+  FilterImpactCard,
+} from '../components/Charts';
+import VulnComparison from '../components/VulnComparison';
+import {
+  buildMonthlyTrend,
+  collectRiskFactorCounts,
+  deriveFilterImpact,
+} from '../utils/vulnMetrics';
 
 const { Title } = Typography;
 const { Content } = Layout;
@@ -14,6 +25,9 @@ const { Content } = Layout;
 export default function Dashboard() {
   const dispatch = useDispatch();
   const vulns = useSelector((s: RootState) => s.vulns.filtered);
+  const allVulns = useSelector((s: RootState) => s.vulns.all);
+  const kaiExclude = useSelector((s: RootState) => s.vulns.kaiExclude);
+  const query = useSelector((s: RootState) => s.vulns.query);
   const [loading, setLoading] = React.useState(true);
 
   useEffect(() => {
@@ -30,6 +44,13 @@ export default function Dashboard() {
     })();
   }, [dispatch]);
 
+  const riskFactors = useMemo(() => collectRiskFactorCounts(vulns), [vulns]);
+  const trendSeries = useMemo(() => buildMonthlyTrend(vulns), [vulns]);
+  const impact = useMemo(
+    () => deriveFilterImpact(allVulns, vulns, kaiExclude, query),
+    [allVulns, vulns, kaiExclude, query],
+  );
+
   return (
     <Layout style={{ padding: '2rem', background: '#fff' }}>
       <Content>
@@ -43,7 +64,19 @@ export default function Dashboard() {
             <Col xs={24} md={12} lg={8}>
               <SeverityChart data={vulns} />
             </Col>
-            <Col xs={24} md={12} lg={16}>
+            <Col xs={24} md={12} lg={8}>
+              <RiskFactorChart data={riskFactors} />
+            </Col>
+            <Col xs={24} md={24} lg={8}>
+              <FilterImpactCard impact={impact} />
+            </Col>
+            <Col xs={24} md={14} lg={14}>
+              <TrendChart data={trendSeries} />
+            </Col>
+            <Col xs={24} md={10} lg={10}>
+              <VulnComparison data={vulns} />
+            </Col>
+            <Col xs={24}>
               <Card title="Vulnerability Table">
                 <VulnTable data={vulns} />
               </Card>
