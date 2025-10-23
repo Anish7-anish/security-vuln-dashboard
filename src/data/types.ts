@@ -13,4 +13,7 @@ export interface Vulnerability {
   summary?: string;
   references?: string[];
   [k: string]: unknown;
+  groupName?: string;
+  repoName?: string;
+  imageName?: string;
 }
