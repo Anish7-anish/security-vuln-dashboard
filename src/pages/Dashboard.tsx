@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, Suspense, lazy } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Layout,
@@ -18,15 +18,23 @@ import { setData } from '../features/vulns/slice';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
 import KPIs from '../components/KPIs';
-import RepoBar from '../components/RepoBar';
-import {
-  SeverityChart,
-  RiskFactorChart,
-  TrendChart,
-  AiManualChart,
-  CriticalHighlights,
-} from '../components/Charts';
-import VulnComparison from '../components/VulnComparison';
+const RepoBar = lazy(() => import('../components/RepoBar'));
+const VulnComparison = lazy(() => import('../components/VulnComparison'));
+const SeverityChart = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.SeverityChart })),
+);
+const RiskFactorChart = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.RiskFactorChart })),
+);
+const TrendChart = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.TrendChart })),
+);
+const AiManualChart = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.AiManualChart })),
+);
+const CriticalHighlights = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.CriticalHighlights })),
+);
 import {
   selectFiltered,
   selectRiskFactorData,
@@ -204,14 +212,30 @@ export default function Dashboard() {
                 </Col>
               )}
               <Col xs={24} lg={preferences.showKPIs ? 12 : 24} xl={preferences.showKPIs ? 12 : 24}>
-                <SeverityChart data={filtered} />
+                <Suspense
+                  fallback={
+                    <Card style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Spin size="large" />
+                    </Card>
+                  }
+                >
+                  <SeverityChart data={filtered} />
+                </Suspense>
               </Col>
             </Row>
 
             <Row gutter={[16, 16]}>
               {preferences.showAiManual && (
                 <Col xs={24} lg={12} xl={12} style={{ display: 'flex' }}>
-                  <AiManualChart data={aiManual} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <AiManualChart data={aiManual} />
+                  </Suspense>
                 </Col>
               )}
               {preferences.showRepoBar && (
@@ -221,7 +245,15 @@ export default function Dashboard() {
                   xl={preferences.showAiManual ? 12 : 24}
                   style={{ display: 'flex' }}
                 >
-                  <RepoBar data={filtered} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <RepoBar data={filtered} />
+                  </Suspense>
                 </Col>
               )}
             </Row>
@@ -229,12 +261,28 @@ export default function Dashboard() {
             <Row gutter={[16, 16]}>
               {preferences.showRiskChart && (
                 <Col xs={24} lg={12}>
-                  <RiskFactorChart data={riskData} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <RiskFactorChart data={riskData} />
+                  </Suspense>
                 </Col>
               )}
               {preferences.showTrendChart && (
                 <Col xs={24} lg={12}>
-                  <TrendChart data={trendData} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <TrendChart data={trendData} />
+                  </Suspense>
                 </Col>
               )}
             </Row>
@@ -242,7 +290,15 @@ export default function Dashboard() {
             {preferences.showHighlights && (
               <Row gutter={[16, 16]}>
                 <Col span={24}>
-                  <CriticalHighlights data={highlights} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <CriticalHighlights data={highlights} />
+                  </Suspense>
                 </Col>
               </Row>
             )}
@@ -258,7 +314,15 @@ export default function Dashboard() {
             {preferences.showComparison && (
               <Row gutter={[16, 16]}>
                 <Col span={24}>
-                  <VulnComparison data={comparisonData} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <VulnComparison data={comparisonData} />
+                  </Suspense>
                 </Col>
               </Row>
             )}

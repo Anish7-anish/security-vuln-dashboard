@@ -12,3 +12,59 @@ body {
   background-color: #ffffff;
   color: #222;
 }
+
+.virtual-table__header .ant-table-body,
+.virtual-table__header .ant-table-placeholder,
+.virtual-table__header .ant-table-content::-webkit-scrollbar {
+  display: none !important;
+}
+
+.virtual-table__header .ant-table-container {
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.virtual-table__body .ant-table {
+  margin: 0;
+  border: none;
+}
+
+.virtual-table__body {
+  background: #fff;
+}
+
+.virtual-table__body .ant-table-container {
+  border: none;
+}
+
+.virtual-table__body .ant-table-content {
+  overflow: hidden !important;
+}
+
+.virtual-table__body .ant-table-placeholder {
+  display: none !important;
+}
+
+.virtual-table__header .ant-table-thead > tr > th,
+.virtual-table__body .ant-table-tbody > tr > td {
+  padding: 12px 16px;
+}
+.virtual-table__header .ant-table-thead > tr > th:first-child,
+.virtual-table__body .ant-table-tbody > tr > td:first-child {
+  padding-left: 20px !important;
+}
+
+.column-cve,
+.column-cve--header {
+  padding-left: 20px !important;
+}
+
+.column-cve__link {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+}
+.virtual-table {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
