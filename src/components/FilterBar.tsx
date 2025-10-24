@@ -12,6 +12,7 @@ import {
   DatePicker,
   Slider,
   InputNumber,
+  Segmented,
 } from 'antd';
 import type { RangeValue } from 'rc-picker/lib/interface';
 import dayjs, { Dayjs } from 'dayjs';
@@ -25,6 +26,8 @@ import {
   setRiskFactors,
   setDateRange,
   setCvssRange,
+  setSortBy,
+  setSortDirection,
 } from '../features/vulns/slice';
 import {
   FilterOutlined,
@@ -42,6 +45,14 @@ type CvssRange = [number, number];
 
 const DEFAULT_CVSS_RANGE: CvssRange = [0, 10];
 const SEARCH_WIDTH = 420;
+const SORT_OPTIONS = [
+  { label: 'Severity', value: 'severity' },
+  { label: 'CVSS', value: 'cvss' },
+  { label: 'Published', value: 'published' },
+  { label: 'Repository', value: 'repo' },
+  { label: 'Package', value: 'package' },
+] as const;
+type SortOptionValue = (typeof SORT_OPTIONS)[number]['value'];
 
 const clampCvss = (value: number): number => {
   const clamped = Math.min(10, Math.max(0, value));
@@ -71,7 +82,9 @@ export default function FilterBar() {
     data,
     riskFactors,
     dateRange,
-    cvssRange,
+  cvssRange,
+    sortBy,
+    sortDirection,
   } = useSelector((s: RootState) => s.vulns);
 
   const [searchValue, setSearchValue] = React.useState(q ?? '');
@@ -169,6 +182,7 @@ export default function FilterBar() {
 
   const currentCvss: CvssRange = cvssRange ?? DEFAULT_CVSS_RANGE;
 
+
   const handleCvssChange = (value: number | number[]) => {
     if (!Array.isArray(value)) return;
     const next = normaliseCvssRange(value as CvssRange);
@@ -204,6 +218,14 @@ export default function FilterBar() {
     }
   };
 
+  const handleSortByChange = (value: string) => {
+    dispatch(setSortBy(value as SortOptionValue));
+  };
+
+  const handleSortDirectionChange = (value: string | number) => {
+    dispatch(setSortDirection(value as 'asc' | 'desc'));
+  };
+
   return (
     <div style={{ marginBottom: 16 }}>
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -229,6 +251,7 @@ export default function FilterBar() {
             <Search
               allowClear
               enterButton="Search"
+              style={{ width: '100%' }}
               onSearch={handleSearchSubmit}
               onChange={(e) => handleSearchChange(e.target.value)}
             />
@@ -328,6 +351,38 @@ export default function FilterBar() {
               value={currentCvss[1]}
               style={{ width: 72 }}
               onChange={handleCvssInputChange(1)}
+            />
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              minWidth: 260,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
+              Sort
+            </Text>
+            <Select
+              value={sortBy}
+              options={SORT_OPTIONS.map((opt) => ({
+                label: opt.label,
+                value: opt.value,
+              }))}
+              onChange={handleSortByChange}
+              style={{ width: 140 }}
+            />
+            <Segmented
+              value={sortDirection}
+              onChange={handleSortDirectionChange}
+              options={[
+                { label: 'Asc', value: 'asc' },
+                { label: 'Desc', value: 'desc' },
+              ]}
+              size="middle"
             />
           </div>
 

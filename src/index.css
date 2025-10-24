@@ -4,22 +4,11 @@
   padding: 0;
   box-sizing: border-box;
 }
-html, body, #root {
-  height: 100%;
-}
-
-body {
-  margin: 0;            /* ← removes the 8px top gap */
-}
-
-* {
-  box-sizing: border-box;
-}
 
 body {
   font-family: sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  background-color: #f7f7f7;
+  background-color: #ffffff;
   color: #222;
 }

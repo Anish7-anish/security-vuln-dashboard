@@ -2,6 +2,8 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { Vulnerability } from '../../data/types';
 
 type Range = [number, number];
+type SortKey = 'severity' | 'cvss' | 'published' | 'repo' | 'package';
+type SortDirection = 'asc' | 'desc';
 
 export interface VulnState {
   data: Vulnerability[];
@@ -12,6 +14,8 @@ export interface VulnState {
   riskFactors: Set<string>;
   dateRange: Range | null;
   cvssRange: Range | null;
+  sortBy: SortKey;
+  sortDirection: SortDirection;
 }
 
 const initialState: VulnState = {
@@ -23,6 +27,8 @@ const initialState: VulnState = {
   riskFactors: new Set<string>(),
   dateRange: null,
   cvssRange: null,
+  sortBy: 'severity',
+  sortDirection: 'desc',
 };
 
 const normalizeRiskFactors = (rf: Vulnerability['riskFactors']): string[] => {
@@ -42,6 +48,70 @@ const getCvss = (v: Vulnerability): number | undefined => {
   if (raw === null || raw === undefined) return undefined;
   const num = Number(raw);
   return Number.isFinite(num) ? num : undefined;
+};
+
+const severityScore = {
+  CRITICAL: 4,
+  HIGH: 3,
+  MEDIUM: 2,
+  LOW: 1,
+  UNKNOWN: 0,
+};
+const normalizeSeverity = (value?: string): keyof typeof severityScore => {
+  if (!value) return 'UNKNOWN';
+  const upper = value.toUpperCase();
+  if (upper.includes('CRIT')) return 'CRITICAL';
+  if (upper.includes('HIGH')) return 'HIGH';
+  if (upper.includes('MED')) return 'MEDIUM';
+  if (upper.includes('LOW')) return 'LOW';
+  return 'UNKNOWN';
+};
+
+const applySort = (rows: Vulnerability[], sortBy: SortKey, direction: SortDirection) => {
+  const dir = direction === 'asc' ? 1 : -1;
+  rows.sort((a, b) => {
+    let diff = 0;
+    switch (sortBy) {
+      case 'severity': {
+        const aScore = severityScore[normalizeSeverity(a.severity)];
+        const bScore = severityScore[normalizeSeverity(b.severity)];
+        diff = aScore - bScore;
+        break;
+      }
+      case 'cvss': {
+        const aScore = getCvss(a) ?? -Infinity;
+        const bScore = getCvss(b) ?? -Infinity;
+        diff = aScore - bScore;
+        break;
+      }
+      case 'published': {
+        const aDate = getPublished(a);
+        const bDate = getPublished(b);
+        const aTs = aDate ? Date.parse(aDate) : 0;
+        const bTs = bDate ? Date.parse(bDate) : 0;
+        diff = aTs - bTs;
+        break;
+      }
+      case 'repo': {
+        diff = (a.repoName || '').localeCompare(b.repoName || '');
+        break;
+      }
+      case 'package': {
+        const aName = (a as any).packageName || a.package || '';
+        const bName = (b as any).packageName || b.package || '';
+        diff = aName.localeCompare(bName);
+        break;
+      }
+      default:
+        diff = 0;
+    }
+    if (diff === 0) {
+      const aId = a.id || '';
+      const bId = b.id || '';
+      return dir * aId.localeCompare(bId);
+    }
+    return dir * diff;
+  });
 };
 
 const recomputeFiltered = (state: VulnState) => {
@@ -103,6 +173,7 @@ const recomputeFiltered = (state: VulnState) => {
   }
 
   state.filtered = rows;
+  applySort(state.filtered, state.sortBy, state.sortDirection);
 };
 
 const vulnSlice = createSlice({
@@ -154,6 +225,16 @@ const vulnSlice = createSlice({
       recomputeFiltered(state);
     },
 
+    setSortBy: (state, action: PayloadAction<SortKey>) => {
+      state.sortBy = action.payload;
+      applySort(state.filtered, state.sortBy, state.sortDirection);
+    },
+
+    setSortDirection: (state, action: PayloadAction<SortDirection>) => {
+      state.sortDirection = action.payload;
+      applySort(state.filtered, state.sortBy, state.sortDirection);
+    },
+
     clearAllFilters: (state) => {
       state.q = '';
       state.kaiExclude.clear();
@@ -161,7 +242,10 @@ const vulnSlice = createSlice({
       state.riskFactors.clear();
       state.dateRange = null;
       state.cvssRange = null;
+      state.sortBy = 'severity';
+      state.sortDirection = 'desc';
       state.filtered = [...state.data];
+      applySort(state.filtered, state.sortBy, state.sortDirection);
     },
   },
 });
@@ -174,6 +258,8 @@ export const {
   setRiskFactors,
   setDateRange,
   setCvssRange,
+  setSortBy,
+  setSortDirection,
   clearAllFilters,
 } = vulnSlice.actions;
 export type { Vulnerability } from '../../data/types';

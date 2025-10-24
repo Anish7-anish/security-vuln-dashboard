@@ -20,9 +20,11 @@ export interface Vulnerability {
   // Dates
   publishedAt?: string;
   updatedAt?: string;
+  published?: string;
+  fixDate?: string;
 
   // Risk metadata
-  riskFactors?: string[];
+  riskFactors?: string[] | Record<string, unknown>;
   kaiStatus?: KaiStatus;
   summary?: string;
   references?: string[];
@@ -32,6 +34,7 @@ export interface Vulnerability {
   groupName?: string;
   repoName?: string;
   imageName?: string;
+  packageName?: string;
 
   // fallback index signature (for unknown properties)
   [k: string]: unknown;
