@@ -7,8 +7,8 @@ React + Vite dashboard for exploring a very large vulnerability dataset. We fetc
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ (we develop on 18/20)
-- npm (bundled with Node). Yarn/pnpm also work if you translate the commands.
+- Node.js 18+
+- npm (bundled with Node). 
 
 ### Install
 ```bash
@@ -105,7 +105,6 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 - **Kai status UX**: We kept the original “Analysis” exclude buttons for muscle memory, but added an inclusive multi-select so analysts can focus on specific statuses. Both interact nicely because the slice differentiates between `kaiExclude` and `kaiStatuses`.
 - **Local preference persistence**: Rather than a backend profile, we stash layout toggles in `localStorage`. Easy to implement, and users tend to run this locally, so syncing isn’t critical.
 - **Header restyle**: Dark blue background made the default header disappear. We switched to a gradient + subtle shadow so navigation stays readable against the deep dashboard canvas.
-- **Removed Filter Impact card**: The KPI progress bar conveys the same “hidden vs visible” signal more compactly, so we dropped the card to reclaim space for the repo bar and AI/manual chart.
 
 ---
 
@@ -113,7 +112,6 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 
 - Dataset lives in `public/ui_demo.json`. Refresh the browser database whenever you change it.
 - Workers are cached by the browser. If you touch `jsonStreamer.worker.ts`, clear IndexedDB or hard-reload (`Cmd+Shift+R`) so the new code runs.
-- Selectors are pure; if you add heavy computations, consider memoising inside `utils/vulnMetrics.ts`.
 - Tests aren’t wired yet. When we stabilise the dataset, we can add store-level tests to verify filtering math.
 
-Happy dashboarding! If anything feels clunky, pop open the Redux DevTools—the slice exposes every toggle, which makes debugging super quick.
+Happy dashboarding!
