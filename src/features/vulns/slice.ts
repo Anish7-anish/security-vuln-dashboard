@@ -10,6 +10,7 @@ export interface VulnState {
   filtered: Vulnerability[];
   q: string;
   kaiExclude: Set<string>;
+  kaiStatuses: Set<string>;
   severities: Set<string>;
   riskFactors: Set<string>;
   dateRange: Range | null;
@@ -23,6 +24,7 @@ const initialState: VulnState = {
   filtered: [],
   q: '',
   kaiExclude: new Set<string>(),
+  kaiStatuses: new Set<string>(),
   severities: new Set<string>(),
   riskFactors: new Set<string>(),
   dateRange: null,
@@ -124,6 +126,12 @@ const recomputeFiltered = (state: VulnState) => {
     );
   }
 
+  if (state.kaiStatuses.size) {
+    rows = rows.filter((v) =>
+      state.kaiStatuses.has((v.kaiStatus ?? '').toString()),
+    );
+  }
+
   if (state.severities.size) {
     rows = rows.filter((v) =>
       state.severities.has((v.severity ?? '').toString().toUpperCase()),
@@ -200,6 +208,11 @@ const vulnSlice = createSlice({
       recomputeFiltered(state);
     },
 
+    setKaiStatuses: (state, action: PayloadAction<string[]>) => {
+      state.kaiStatuses = new Set(action.payload ?? []);
+      recomputeFiltered(state);
+    },
+
     toggleSeverity: (state, action: PayloadAction<string>) => {
       const sev = action.payload.toUpperCase();
       if (state.severities.has(sev)) {
@@ -238,6 +251,7 @@ const vulnSlice = createSlice({
     clearAllFilters: (state) => {
       state.q = '';
       state.kaiExclude.clear();
+      state.kaiStatuses.clear();
       state.severities.clear();
       state.riskFactors.clear();
       state.dateRange = null;
@@ -254,6 +268,7 @@ export const {
   setData,
   setQuery,
   toggleKaiFilter,
+  setKaiStatuses,
   toggleSeverity,
   setRiskFactors,
   setDateRange,

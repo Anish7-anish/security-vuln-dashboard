@@ -17,11 +17,12 @@ import { streamIntoDB, getAllVulnerabilities } from '../data/loader';
 import { setData } from '../features/vulns/slice';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
+import KPIs from '../components/KPIs';
+import RepoBar from '../components/RepoBar';
 import {
   SeverityChart,
   RiskFactorChart,
   TrendChart,
-  FilterImpactCard,
   AiManualChart,
   CriticalHighlights,
 } from '../components/Charts';
@@ -30,7 +31,6 @@ import {
   selectFiltered,
   selectRiskFactorData,
   selectTrendData,
-  selectFilterImpact,
   selectAiManualData,
   selectCriticalHighlights,
 } from '../features/vulns/selectors';
@@ -51,23 +51,25 @@ const contentStyle: React.CSSProperties = {
 };
 
 type DashboardPreferences = {
-  showFilterImpact: boolean;
   showRiskChart: boolean;
   showTrendChart: boolean;
   showAiManual: boolean;
   showComparison: boolean;
   showHighlights: boolean;
+  showKPIs: boolean;
+  showRepoBar: boolean;
 };
 
 const PREFERENCE_KEY = 'svd-dashboard-preferences';
 
 const defaultPreferences: DashboardPreferences = {
-  showFilterImpact: true,
   showRiskChart: true,
   showTrendChart: true,
   showAiManual: true,
   showComparison: true,
   showHighlights: true,
+  showKPIs: true,
+  showRepoBar: true,
 };
 
 export default function Dashboard() {
@@ -75,7 +77,6 @@ export default function Dashboard() {
   const filtered = useSelector(selectFiltered);
   const riskData = useSelector(selectRiskFactorData);
   const trendData = useSelector(selectTrendData);
-  const impact = useSelector(selectFilterImpact);
   const aiManual = useSelector(selectAiManualData);
   const highlights = useSelector(selectCriticalHighlights);
 
@@ -135,13 +136,6 @@ export default function Dashboard() {
             <Space size="small" wrap>
               <Switch
                 size="small"
-                checked={preferences.showFilterImpact}
-                onChange={togglePreference('showFilterImpact')}
-                checkedChildren="Impact"
-                unCheckedChildren="Impact"
-              />
-              <Switch
-                size="small"
                 checked={preferences.showRiskChart}
                 onChange={togglePreference('showRiskChart')}
                 checkedChildren="Risk"
@@ -175,6 +169,20 @@ export default function Dashboard() {
                 checkedChildren="Compare"
                 unCheckedChildren="Compare"
               />
+              <Switch
+                size="small"
+                checked={preferences.showKPIs}
+                onChange={togglePreference('showKPIs')}
+                checkedChildren="KPIs"
+                unCheckedChildren="KPIs"
+              />
+              <Switch
+                size="small"
+                checked={preferences.showRepoBar}
+                onChange={togglePreference('showRepoBar')}
+                checkedChildren="Repos"
+                unCheckedChildren="Repos"
+              />
             </Space>
           </Space>
         </Space>
@@ -190,15 +198,32 @@ export default function Dashboard() {
         ) : (
           <Space direction="vertical" size={24} style={{ width: '100%' }}>
             <Row gutter={[16, 16]}>
-              <Col xs={24} lg={12} xl={8}>
+              {preferences.showKPIs && (
+                <Col xs={24} lg={12} xl={12}>
+                  <KPIs />
+                </Col>
+              )}
+              <Col xs={24} lg={preferences.showKPIs ? 12 : 24} xl={preferences.showKPIs ? 12 : 24}>
                 <SeverityChart data={filtered} />
               </Col>
-              <Col xs={24} lg={12} xl={8}>
-                {preferences.showFilterImpact && <FilterImpactCard impact={impact} />}
-              </Col>
-              <Col xs={24} xl={8}>
-                {preferences.showAiManual && <AiManualChart data={aiManual} />}
-              </Col>
+            </Row>
+
+            <Row gutter={[16, 16]}>
+              {preferences.showAiManual && (
+                <Col xs={24} lg={12} xl={12} style={{ display: 'flex' }}>
+                  <AiManualChart data={aiManual} />
+                </Col>
+              )}
+              {preferences.showRepoBar && (
+                <Col
+                  xs={24}
+                  lg={preferences.showAiManual ? 12 : 24}
+                  xl={preferences.showAiManual ? 12 : 24}
+                  style={{ display: 'flex' }}
+                >
+                  <RepoBar data={filtered} />
+                </Col>
+              )}
             </Row>
 
             <Row gutter={[16, 16]}>

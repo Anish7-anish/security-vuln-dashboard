@@ -24,6 +24,7 @@ import {
   clearAllFilters,
   toggleSeverity,
   setRiskFactors,
+  setKaiStatuses,
   setDateRange,
   setCvssRange,
   setSortBy,
@@ -77,6 +78,7 @@ export default function FilterBar() {
   const {
     q,
     kaiExclude,
+    kaiStatuses,
     severities,
     filtered,
     data,
@@ -147,9 +149,14 @@ export default function FilterBar() {
   const aiActive = kaiExclude.has('ai-invalid-norisk');
 
   const activeChips = [
-    ...Array.from(kaiExclude).map((k) => ({ type: 'kai', label: k })),
-    ...Array.from(severities).map((s) => ({ type: 'sev', label: s })),
-    ...Array.from(riskFactors).map((rf) => ({ type: 'rf', label: rf })),
+    ...Array.from(kaiExclude).map((k) => ({ type: 'kai', label: k, value: k })),
+    ...Array.from(kaiStatuses).map((status) => ({
+      type: 'kaiStatus',
+      label: status || 'kai: (none)',
+      value: status,
+    })),
+    ...Array.from(severities).map((s) => ({ type: 'sev', label: s, value: s })),
+    ...Array.from(riskFactors).map((rf) => ({ type: 'rf', label: rf, value: rf })),
     ...(dateRange ? [{ type: 'date', label: 'Date range' }] : []),
     ...(cvssRange ? [{ type: 'cvss', label: `CVSS ${cvssRange[0]}-${cvssRange[1]}` }] : []),
     ...(q ? [{ type: 'q', label: `q:“${q}”` }] : []),
@@ -164,6 +171,17 @@ export default function FilterBar() {
       list.forEach((item) => collected.add(item));
     });
     return Array.from(collected).sort();
+  }, [data]);
+
+  const allKaiStatuses = React.useMemo(() => {
+    const collected = new Set<string>();
+    data.forEach((v) => {
+      const raw = (v.kaiStatus ?? '').toString();
+      if (raw) {
+        collected.add(raw);
+      }
+    });
+    return Array.from(collected).sort((a, b) => a.localeCompare(b));
   }, [data]);
 
   const handleDateRangeChange = (value: RangeValue<Dayjs>) => {
@@ -303,6 +321,20 @@ export default function FilterBar() {
             onChange={(values) => dispatch(setRiskFactors(values))}
           />
 
+          <Select
+            allowClear
+            mode="multiple"
+            placeholder="Kai status"
+            style={{ minWidth: 180, maxWidth: 260 }}
+            value={Array.from(kaiStatuses)}
+            options={allKaiStatuses.map((status) => ({
+              label: status,
+              value: status,
+            }))}
+            onChange={(values) => dispatch(setKaiStatuses(values))}
+            notFoundContent="No kai statuses"
+          />
+
           <RangePicker
             value={currentRange}
             onChange={handleDateRangeChange}
@@ -413,6 +445,8 @@ export default function FilterBar() {
                 color={
                   c.type === 'kai'
                     ? 'geekblue'
+                    : c.type === 'kaiStatus'
+                    ? 'cyan'
                     : c.type === 'sev'
                     ? 'volcano'
                     : c.type === 'rf'
@@ -424,11 +458,16 @@ export default function FilterBar() {
                 closable
                 onClose={(e) => {
                   e.preventDefault();
-                  if (c.type === 'kai') dispatch(toggleKaiFilter(c.label));
-                  else if (c.type === 'sev') dispatch(toggleSeverity(c.label));
+                  const value = 'value' in c ? (c as any).value : c.label;
+                  if (c.type === 'kai') dispatch(toggleKaiFilter(value));
+                  else if (c.type === 'kaiStatus') {
+                    const next = new Set(kaiStatuses);
+                    next.delete(value);
+                    dispatch(setKaiStatuses(Array.from(next)));
+                  } else if (c.type === 'sev') dispatch(toggleSeverity(value));
                   else if (c.type === 'rf') {
                     const next = new Set(riskFactors);
-                    next.delete(c.label);
+                    next.delete(value);
                     dispatch(setRiskFactors(Array.from(next)));
                   } else if (c.type === 'date') {
                     dispatch(setDateRange(null));

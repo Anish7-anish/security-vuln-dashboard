@@ -12,8 +12,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <Layout style={{minHeight: '100vh'}}>
-        <Header>
-          <Menu theme="dark" mode="horizontal">
+        <Header
+          style={{
+            background: 'linear-gradient(135deg, #0f3a5a 0%, #081a2e 100%)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+          }}
+        >
+          <Menu theme="dark" mode="horizontal" style={{ background: 'transparent' }}>
             <Menu.Item key="1">
               <NavLink to="/">Dashboard</NavLink>
             </Menu.Item>

@@ -71,18 +71,29 @@ self.onmessage = async (e: MessageEvent) => {
         for (const [imageName, image] of Object.entries((repo as any).images || {})) {
           const vulns = (image as any).vulnerabilities || [];
           for (const vuln of vulns) {
-            vuln.id = vuln.id || `vuln-${totalCount++}`;
-            vuln.groupName = groupName;
-            vuln.repoName = repoName;
-            vuln.imageName = imageName;
-            if (totalCount < 5) {
+            const ordinal = totalCount++;
+            const sourceId = (vuln as any).id ?? null;
+            const baseKey = sourceId || vuln.cve || `row-${ordinal}`;
+            const uniqueId = `${groupName}|${repoName}|${imageName}|${baseKey}|${ordinal}`;
+
+            const record: Vulnerability = {
+              ...vuln,
+              id: uniqueId,
+              groupName,
+              repoName,
+              imageName,
+              sourceId: sourceId ?? undefined,
+            };
+
+            if (ordinal < 5) {
               console.log("🔎 Sample vuln:", {
-                cve: vuln.cve,
-                kaiStatus: vuln.kaiStatus,
-                hasKey: Object.keys(vuln).includes("kaiStatus"),
+                id: record.id,
+                cve: record.cve,
+                kaiStatus: record.kaiStatus,
+                sourceId,
               });
             }
-            items.push(vuln);
+            items.push(record);
 
             // Send chunk
             if (items.length >= CHUNK_SIZE) {
