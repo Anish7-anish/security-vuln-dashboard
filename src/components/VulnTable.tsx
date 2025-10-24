@@ -2,6 +2,7 @@ import React from 'react';
 import { Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { Vulnerability } from '../data/types';
+import { Link } from 'react-router-dom';
 
 export default function VulnTable({ data }: { data: Vulnerability[] }) {
     const columns: ColumnsType<Vulnerability> = [
@@ -9,7 +10,11 @@ export default function VulnTable({ data }: { data: Vulnerability[] }) {
             title: 'CVE ID',
             dataIndex: 'cve',
             key: 'cve',
-            render: (cve) => <a href={`https://nvd.nist.gov/vuln/detail/${cve}`} target="_blank">{cve}</a>
+            render: (_cve, record) => (
+              <Link to={`/vuln/${encodeURIComponent(record.id)}`}>
+                {record.cve || record.id}
+              </Link>
+            )
         },
         {
             title: "Severity",
