@@ -1,0 +1,50 @@
+/* src/components/FilterBar.css */
+
+.severity-btn {
+  font-weight: 600;
+  border-radius: 8px;
+  border-width: 2px;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+}
+
+/* Severity-specific colors */
+.severity-btn.critical {
+  border-color: #a8071a;
+  color: #a8071a;
+}
+.severity-btn.critical:hover,
+.severity-btn.critical.active {
+  background-color: #a8071a;
+  color: white;
+}
+
+.severity-btn.high {
+  border-color: #fa541c;
+  color: #fa541c;
+}
+.severity-btn.high:hover,
+.severity-btn.high.active {
+  background-color: #fa541c;
+  color: white;
+}
+
+.severity-btn.medium {
+  border-color: #faad14;
+  color: #faad14;
+}
+.severity-btn.medium:hover,
+.severity-btn.medium.active {
+  background-color: #faad14;
+  color: white;
+}
+
+.severity-btn.low {
+  border-color: #52c41a;
+  color: #52c41a;
+}
+.severity-btn.low:hover,
+.severity-btn.low.active {
+  background-color: #52c41a;
+  color: white;
+}
