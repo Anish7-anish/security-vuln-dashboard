@@ -49,7 +49,8 @@ const { Content } = Layout;
 const pageStyle: React.CSSProperties = {
   minHeight: 'calc(100vh - 64px)',
   padding: '1.5rem clamp(1rem, 2vw, 2rem) 2.5rem',
-  background: '#0c1b2a',
+  // background: '#0c1b2a'
+  background: '#111827',
 };
 
 const contentStyle: React.CSSProperties = {
