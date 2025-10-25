@@ -5,12 +5,38 @@
   box-sizing: border-box;
 }
 
+:root {
+  --ant-font-family: 'Space Grotesk', sans-serif;
+}
+
 body {
-  font-family: sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   background-color: #ffffff;
   color: #222;
+}
+
+.ant-typography,
+.ant-btn,
+.ant-menu,
+.ant-input,
+.ant-select,
+.ant-card,
+.ant-table,
+.ant-alert,
+.ant-tag,
+.ant-statistic,
+.ant-descriptions,
+.ant-progress,
+.ant-switch,
+.ant-menu * ,
+.ant-btn *,
+.ant-typography *,
+.ant-table *,
+.ant-select *,
+.ant-input * {
+  font-family: 'Space Grotesk', sans-serif !important;
 }
 
 .virtual-table__header .ant-table-body,

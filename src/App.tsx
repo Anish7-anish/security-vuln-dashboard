@@ -7,6 +7,7 @@ enableMapSet();
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const VulnDetail = lazy(() => import("./pages/VulnDetail"));
+const VulnQuickLookup = lazy(() => import("./pages/VulnQuickLookup"));
 
 const { Header, Content } = Layout;
 
@@ -28,6 +29,9 @@ export default function App() {
             <Menu.Item key="2">
               <NavLink to="/search">Search</NavLink>
             </Menu.Item>
+            <Menu.Item key="3">
+              <NavLink to="/detail">Vulnerability Detail</NavLink>
+            </Menu.Item>
           </Menu>
         </Header>
 
@@ -42,6 +46,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/detail" element={<VulnQuickLookup />} />
               <Route path="/vuln/:id" element={<VulnDetail />} />
             </Routes>
           </Suspense>

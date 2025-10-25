@@ -12,6 +12,7 @@ import {
   Divider,
   Tooltip,
   Empty,
+  Alert,
 } from 'antd';
 import { streamIntoDB, getAllVulnerabilities } from '../data/loader';
 import { setData } from '../features/vulns/slice';
@@ -306,7 +307,15 @@ export default function Dashboard() {
 
             <Row gutter={[16, 16]}>
               <Col span={24}>
-                <Card title="Vulnerability Table" bodyStyle={{ padding: 0 }}>
+                <Card
+                  title="Vulnerability Table"
+                  extra={
+                    <Text style={{ color: '#1f1f1f' }}>
+                      Click any CVE to open the detailed view, or use the “Vulnerability Detail” page in the header to search directly.
+                    </Text>
+                  }
+                  bodyStyle={{ padding: 0 }}
+                >
                   <VulnTable data={filtered} />
                 </Card>
               </Col>
