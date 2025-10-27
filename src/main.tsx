@@ -4,7 +4,7 @@ import { Provider } from 'react-redux';
 import { store } from './app/store';
 import App from './App';
 import { setData, setQuery, toggleKaiFilter } from './features/vulns/slice';
-// import './index.css';
+import './index.css';
 // import { streamIntoDB, getAllVulnerabilities } from './data/loader';
 
 // (async () => {

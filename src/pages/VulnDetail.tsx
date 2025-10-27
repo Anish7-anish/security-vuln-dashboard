@@ -18,11 +18,18 @@ const VulnDetail: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
-      let found = all.find((v) => v.id === id);
+      // allow people to jump in via either the composite id or plain CVE
+      const target = decodeURIComponent(id ?? '').trim();
+      const targetLower = target.toLowerCase();
+      let found =
+        all.find((v) => (v.id || '').toLowerCase() === targetLower) ||
+        all.find((v) => (v.cve || '').toLowerCase() === targetLower);
       if (!found) {
         // fallback: read directly from IndexedDB
         const stored = await getAllVulnerabilities();
-        found = stored.find((v) => v.id === id);
+        found =
+          stored.find((v) => (v.id || '').toLowerCase() === targetLower) ||
+          stored.find((v) => (v.cve || '').toLowerCase() === targetLower);
       }
       setVuln(found ?? null);
       setLoading(false);

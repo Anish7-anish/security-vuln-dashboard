@@ -1,10 +1,13 @@
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
-import { Layout, Menu } from "antd";
-import Dashboard from "./pages/Dashboard";
-import SearchPage from "./pages/SearchPage";
-import VulnDetail from "./pages/VulnDetail";
-import { enableMapSet } from 'immer';   // ✅ add this
-enableMapSet();  
+import { Layout, Menu, Spin } from "antd";
+import { enableMapSet } from 'immer';
+enableMapSet();
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const SearchPage = lazy(() => import("./pages/SearchPage"));
+const VulnDetail = lazy(() => import("./pages/VulnDetail"));
+const VulnQuickLookup = lazy(() => import("./pages/VulnQuickLookup"));
 
 const { Header, Content } = Layout;
 
@@ -26,15 +29,27 @@ export default function App() {
             <Menu.Item key="2">
               <NavLink to="/search">Search</NavLink>
             </Menu.Item>
+            <Menu.Item key="3">
+              <NavLink to="/detail">Vulnerability Detail</NavLink>
+            </Menu.Item>
           </Menu>
         </Header>
 
         <Content style={{ minHeight: "calc(100vh - 64px)" }}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/vuln/:id" element={<VulnDetail />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <div style={{ padding: '4rem', textAlign: 'center' }}>
+                <Spin size="large" />
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/detail" element={<VulnQuickLookup />} />
+              <Route path="/vuln/:id" element={<VulnDetail />} />
+            </Routes>
+          </Suspense>
         </Content>
       </Layout>
     </BrowserRouter>

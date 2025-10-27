@@ -34,8 +34,10 @@ import {
   FilterOutlined,
   ThunderboltOutlined,
   ClearOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import './FilterBar.css';
+import { exportAsCsv, exportAsJson, saveBlob } from '../utils/exportData';
 
 const { Search } = Input;
 const { Text } = Typography;
@@ -91,8 +93,10 @@ export default function FilterBar() {
 
   const [searchValue, setSearchValue] = React.useState(q ?? '');
   const [options, setOptions] = React.useState<{ value: string }[]>([]);
+  const [exporting, setExporting] = React.useState<'csv' | 'json' | null>(null);
 
   React.useEffect(() => {
+    // keep input box in sync whenever query is changed elsewhere
     setSearchValue(q ?? '');
   }, [q]);
 
@@ -109,6 +113,7 @@ export default function FilterBar() {
     const matches: string[] = [];
 
     for (const vuln of data) {
+      // grab interesting bits off each vuln so the user can find stuff quickly
       const candidates = [
         vuln.cve,
         (vuln as any).package ?? (vuln as any).packageName,
@@ -203,6 +208,7 @@ export default function FilterBar() {
 
   const handleCvssChange = (value: number | number[]) => {
     if (!Array.isArray(value)) return;
+    // slider delivers floats so we clamp and normalise everything here
     const next = normaliseCvssRange(value as CvssRange);
     dispatch(setCvssRange(next));
   };
@@ -222,6 +228,7 @@ export default function FilterBar() {
     next[index] = clamped;
 
     if (index === 0 && next[0] > next[1]) {
+      // if the left handle crosses we drag the other end with it
       next[1] = clamped;
     } else if (index === 1 && next[1] < next[0]) {
       next[0] = clamped;
@@ -242,6 +249,21 @@ export default function FilterBar() {
 
   const handleSortDirectionChange = (value: string | number) => {
     dispatch(setSortDirection(value as 'asc' | 'desc'));
+  };
+
+  const handleExport = async (format: 'csv' | 'json') => {
+    if (!filtered.length || exporting) return;
+    setExporting(format);
+    try {
+      // tiny delay gives the spinner a chance to render before the heavy work
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const blob = format === 'csv' ? exportAsCsv(filtered) : exportAsJson(filtered);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `vulnerabilities-${format}-${timestamp}.${format}`;
+      saveBlob(blob, filename);
+    } finally {
+      setExporting(null);
+    }
   };
 
   return (
@@ -424,6 +446,23 @@ export default function FilterBar() {
             onClick={() => dispatch(clearAllFilters())}
           >
             Clear All
+          </Button>
+
+          <Button
+            icon={<DownloadOutlined />}
+            loading={exporting === 'csv'}
+            disabled={!filtered.length}
+            onClick={() => handleExport('csv')}
+          >
+            Export CSV
+          </Button>
+          <Button
+            icon={<DownloadOutlined />}
+            loading={exporting === 'json'}
+            disabled={!filtered.length}
+            onClick={() => handleExport('json')}
+          >
+            Export JSON
           </Button>
 
           {q && (

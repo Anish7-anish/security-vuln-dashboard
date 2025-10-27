@@ -105,6 +105,8 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 - **Kai status UX**: We kept the original “Analysis” exclude buttons for muscle memory, but added an inclusive multi-select so analysts can focus on specific statuses. Both interact nicely because the slice differentiates between `kaiExclude` and `kaiStatuses`.
 - **Local preference persistence**: Rather than a backend profile, we stash layout toggles in `localStorage`. Easy to implement, and users tend to run this locally, so syncing isn’t critical.
 - **Header restyle**: Dark blue background made the default header disappear. We switched to a gradient + subtle shadow so navigation stays readable against the deep dashboard canvas.
+- **Virtual scroll > always-on pagination**: Paging through hundreds of CVEs was painful, so big result sets stay in a single, virtualized scroll while smaller ones keep the familiar paginated view. Feels more fluid and the DOM stays lean.
+- **Lazy chunks for charts/routes**: Pulled the chart bundle, repo comparison, and secondary pages behind `React.lazy` so the dashboard boots faster and streams in the heavy stuff only when we actually visit it, with Suspense spinners covering the gap.
 
 ---
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, Suspense, lazy } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Layout,
@@ -12,21 +12,30 @@ import {
   Divider,
   Tooltip,
   Empty,
+  Alert,
 } from 'antd';
 import { streamIntoDB, getAllVulnerabilities } from '../data/loader';
 import { setData } from '../features/vulns/slice';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
 import KPIs from '../components/KPIs';
-import RepoBar from '../components/RepoBar';
-import {
-  SeverityChart,
-  RiskFactorChart,
-  TrendChart,
-  AiManualChart,
-  CriticalHighlights,
-} from '../components/Charts';
-import VulnComparison from '../components/VulnComparison';
+const RepoBar = lazy(() => import('../components/RepoBar'));
+const VulnComparison = lazy(() => import('../components/VulnComparison'));
+const SeverityChart = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.SeverityChart })),
+);
+const RiskFactorChart = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.RiskFactorChart })),
+);
+const TrendChart = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.TrendChart })),
+);
+const AiManualChart = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.AiManualChart })),
+);
+const CriticalHighlights = lazy(() =>
+  import('../components/Charts').then((mod) => ({ default: mod.CriticalHighlights })),
+);
 import {
   selectFiltered,
   selectRiskFactorData,
@@ -41,7 +50,8 @@ const { Content } = Layout;
 const pageStyle: React.CSSProperties = {
   minHeight: 'calc(100vh - 64px)',
   padding: '1.5rem clamp(1rem, 2vw, 2rem) 2.5rem',
-  background: '#0c1b2a',
+  // background: '#0c1b2a'
+  background: '#111827',
 };
 
 const contentStyle: React.CSSProperties = {
@@ -94,10 +104,12 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    // stash toggles so the layout sticks between page loads
     localStorage.setItem(PREFERENCE_KEY, JSON.stringify(preferences));
   }, [preferences]);
 
   useEffect(() => {
+    // on boot try indexedDB first, stream the demo blob if we are empty
     (async () => {
       const stored = await getAllVulnerabilities();
       if (stored.length === 0) {
@@ -204,14 +216,30 @@ export default function Dashboard() {
                 </Col>
               )}
               <Col xs={24} lg={preferences.showKPIs ? 12 : 24} xl={preferences.showKPIs ? 12 : 24}>
-                <SeverityChart data={filtered} />
+                <Suspense
+                  fallback={
+                    <Card style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Spin size="large" />
+                    </Card>
+                  }
+                >
+                  <SeverityChart data={filtered} />
+                </Suspense>
               </Col>
             </Row>
 
             <Row gutter={[16, 16]}>
               {preferences.showAiManual && (
                 <Col xs={24} lg={12} xl={12} style={{ display: 'flex' }}>
-                  <AiManualChart data={aiManual} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <AiManualChart data={aiManual} />
+                  </Suspense>
                 </Col>
               )}
               {preferences.showRepoBar && (
@@ -221,7 +249,15 @@ export default function Dashboard() {
                   xl={preferences.showAiManual ? 12 : 24}
                   style={{ display: 'flex' }}
                 >
-                  <RepoBar data={filtered} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <RepoBar data={filtered} />
+                  </Suspense>
                 </Col>
               )}
             </Row>
@@ -229,12 +265,28 @@ export default function Dashboard() {
             <Row gutter={[16, 16]}>
               {preferences.showRiskChart && (
                 <Col xs={24} lg={12}>
-                  <RiskFactorChart data={riskData} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <RiskFactorChart data={riskData} />
+                  </Suspense>
                 </Col>
               )}
               {preferences.showTrendChart && (
                 <Col xs={24} lg={12}>
-                  <TrendChart data={trendData} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <TrendChart data={trendData} />
+                  </Suspense>
                 </Col>
               )}
             </Row>
@@ -242,14 +294,30 @@ export default function Dashboard() {
             {preferences.showHighlights && (
               <Row gutter={[16, 16]}>
                 <Col span={24}>
-                  <CriticalHighlights data={highlights} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <CriticalHighlights data={highlights} />
+                  </Suspense>
                 </Col>
               </Row>
             )}
 
             <Row gutter={[16, 16]}>
               <Col span={24}>
-                <Card title="Vulnerability Table" bodyStyle={{ padding: 0 }}>
+                <Card
+                  title="Vulnerability Table"
+                  extra={
+                    <Text style={{ color: '#1f1f1f' }}>
+                      Click any CVE to open the detailed view, or use the “Vulnerability Detail” page in the header to search directly.
+                    </Text>
+                  }
+                  bodyStyle={{ padding: 0 }}
+                >
                   <VulnTable data={filtered} />
                 </Card>
               </Col>
@@ -258,7 +326,15 @@ export default function Dashboard() {
             {preferences.showComparison && (
               <Row gutter={[16, 16]}>
                 <Col span={24}>
-                  <VulnComparison data={comparisonData} />
+                  <Suspense
+                    fallback={
+                      <Card style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spin size="large" />
+                      </Card>
+                    }
+                  >
+                    <VulnComparison data={comparisonData} />
+                  </Suspense>
                 </Col>
               </Row>
             )}

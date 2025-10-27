@@ -1,7 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { Vulnerability } from '../../data/types';
 
-<<<<<<< HEAD
 type Range = [number, number];
 type SortKey = 'severity' | 'cvss' | 'published' | 'repo' | 'package';
 type SortDirection = 'asc' | 'desc';
@@ -71,6 +70,7 @@ const normalizeSeverity = (value?: string): keyof typeof severityScore => {
 };
 
 const applySort = (rows: Vulnerability[], sortBy: SortKey, direction: SortDirection) => {
+  // shuffle order keeping the same array so table updates stay cheap
   const dir = direction === 'asc' ? 1 : -1;
   rows.sort((a, b) => {
     let diff = 0;
@@ -118,6 +118,7 @@ const applySort = (rows: Vulnerability[], sortBy: SortKey, direction: SortDirect
 };
 
 const recomputeFiltered = (state: VulnState) => {
+  // start from scratch every time so filters never stack weirdly
   const query = state.q.trim().toLowerCase();
   let rows = [...state.data];
 
@@ -140,6 +141,7 @@ const recomputeFiltered = (state: VulnState) => {
   }
 
   if (state.riskFactors.size) {
+    // each vuln can have many risk flags, we keep it if any overlap
     rows = rows.filter((v) =>
       normalizeRiskFactors(v.riskFactors).some((r) => state.riskFactors.has(r)),
     );
@@ -182,31 +184,15 @@ const recomputeFiltered = (state: VulnState) => {
   }
 
   state.filtered = rows;
+  // final result always respects current sort
   applySort(state.filtered, state.sortBy, state.sortDirection);
 };
 
-=======
-interface VulnState {
-  all: Vulnerability[];
-  filtered: Vulnerability[];
-  kaiExclude: string[];
-  query: string;
-}
-
-const initialState: VulnState = {
-  all: [],
-  filtered: [],
-  kaiExclude: [],
-  query: '',
-};
-
->>>>>>> origin/main
 const vulnSlice = createSlice({
   name: 'vulns',
   initialState,
   reducers: {
     setData: (state, action: PayloadAction<Vulnerability[]>) => {
-<<<<<<< HEAD
       state.data = action.payload ?? [];
       recomputeFiltered(state);
     },
@@ -278,41 +264,10 @@ const vulnSlice = createSlice({
       state.sortDirection = 'desc';
       state.filtered = [...state.data];
       applySort(state.filtered, state.sortBy, state.sortDirection);
-=======
-      state.all = action.payload;
-      state.filtered = action.payload;
     },
-
-    setQuery: (state, action: PayloadAction<string>) => {
-      const query = action.payload.toLowerCase();
-      state.query = action.payload;
-
-      // ✅ Type narrowing ensures v is Vulnerability
-      const all: Vulnerability[] = Array.isArray(state.all)
-        ? (state.all as Vulnerability[])
-        : [];
-
-      state.filtered = all.filter((v) =>
-        (v.cve ?? '').toLowerCase().includes(query),
-      );
->>>>>>> origin/main
-    },
-
-    toggleKaiFilter(state, action: PayloadAction<string>) {
-    const status = action.payload;
-    if (state.kaiExclude.includes(status)) {
-      state.kaiExclude = state.kaiExclude.filter((s) => s !== status);
-    } else {
-      state.kaiExclude.push(status);
-    }
-    state.filtered = state.all.filter(
-      (x) => !state.kaiExclude.includes(x.kaiStatus || '')
-    );
-},
   },
 });
 
-<<<<<<< HEAD
 export const {
   setData,
   setQuery,
@@ -327,7 +282,4 @@ export const {
   clearAllFilters,
 } = vulnSlice.actions;
 export type { Vulnerability } from '../../data/types';
-=======
-export const { setData, setQuery, toggleKaiFilter } = vulnSlice.actions;
->>>>>>> origin/main
 export default vulnSlice.reducer;
