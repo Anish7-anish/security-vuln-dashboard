@@ -2,6 +2,12 @@ import { openDB } from 'idb';
 import { Vulnerability } from './types';
 import workerUrl from '../workers/jsonStreamer.worker?worker&url';
 
+const REMOTE_DATA =
+  'https://raw.githubusercontent.com/chanduusc/Ui-Demo-Data/main/ui_demo.json';
+export const DATA_URL =
+  import.meta.env.VITE_DATA_URL ||
+  (import.meta.env.PROD ? REMOTE_DATA : '/ui_demo.json');
+
 const DB_NAME = 'vuln-db';
 const STORE = 'vulns';
 

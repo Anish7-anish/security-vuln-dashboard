@@ -14,7 +14,7 @@ import {
   Empty,
   Alert,
 } from 'antd';
-import { streamIntoDB, getAllVulnerabilities } from '../data/loader';
+import { streamIntoDB, getAllVulnerabilities, DATA_URL } from '../data/loader';
 import { setData } from '../features/vulns/slice';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
@@ -113,7 +113,7 @@ export default function Dashboard() {
     (async () => {
       const stored = await getAllVulnerabilities();
       if (stored.length === 0) {
-        await streamIntoDB('/ui_demo.json');
+        await streamIntoDB(DATA_URL);
       }
       const data = await getAllVulnerabilities();
       dispatch(setData(data));
