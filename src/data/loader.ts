@@ -1,27 +1,47 @@
-import { openDB } from 'idb';
+import { openDB, type IDBPDatabase } from 'idb';
 import { Vulnerability } from './types';
 import workerUrl from '../workers/jsonStreamer.worker?worker&url';
 
 const REMOTE_DATA =
-  'https://raw.githubusercontent.com/chanduusc/Ui-Demo-Data/main/ui_demo.json';
+  'https://media.githubusercontent.com/media/chanduusc/Ui-Demo-Data/main/ui_demo.json?raw=1';
 export const DATA_URL =
-  import.meta.env.VITE_DATA_URL ||
-  (import.meta.env.PROD ? REMOTE_DATA : '/ui_demo.json');
+  import.meta.env.VITE_DATA_URL || REMOTE_DATA;
 
 const DB_NAME = 'vuln-db';
+const DB_VERSION = 2;
 const STORE = 'vulns';
 
+let dbPromise:
+  | Promise<IDBPDatabase<Record<string, unknown>>>
+  | null = null;
+
 export async function ensureDB() {
-  return openDB(DB_NAME, 1, {
-    upgrade(db) {
-      const store = db.createObjectStore(STORE, { keyPath: 'id' });
-      store.createIndex('severity', 'severity');
-      store.createIndex('kaiStatus', 'kaiStatus');
-      store.createIndex('groupName','groupName');
-      store.createIndex('repoName', 'repoName');
-      store.createIndex('imageName', 'imageName');
-    },
-  });
+  if (!dbPromise) {
+    dbPromise = openDB(DB_NAME, DB_VERSION, {
+      upgrade(db, _oldVersion, _newVersion, transaction) {
+        const baseStore = db.objectStoreNames.contains(STORE)
+          ? transaction.objectStore(STORE)
+          : db.createObjectStore(STORE, { keyPath: 'id' });
+
+        if (!baseStore.indexNames.contains('severity')) {
+          baseStore.createIndex('severity', 'severity');
+        }
+        if (!baseStore.indexNames.contains('kaiStatus')) {
+          baseStore.createIndex('kaiStatus', 'kaiStatus');
+        }
+        if (!baseStore.indexNames.contains('groupName')) {
+          baseStore.createIndex('groupName', 'groupName');
+        }
+        if (!baseStore.indexNames.contains('repoName')) {
+          baseStore.createIndex('repoName', 'repoName');
+        }
+        if (!baseStore.indexNames.contains('imageName')) {
+          baseStore.createIndex('imageName', 'imageName');
+        }
+      },
+    });
+  }
+  return dbPromise;
 }
 
 // export async function streamIntoDB(url: string){
