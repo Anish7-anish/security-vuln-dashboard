@@ -76,6 +76,7 @@ self.onmessage = async (e: MessageEvent) => {
             const baseKey = sourceId || vuln.cve || `row-${ordinal}`;
             const uniqueId = `${groupName}|${repoName}|${imageName}|${baseKey}|${ordinal}`;
 
+            // make a fresh record so we never mutate the original blob
             const record: Vulnerability = {
               ...vuln,
               id: uniqueId,

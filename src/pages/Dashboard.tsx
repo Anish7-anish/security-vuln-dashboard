@@ -104,10 +104,12 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    // stash toggles so the layout sticks between page loads
     localStorage.setItem(PREFERENCE_KEY, JSON.stringify(preferences));
   }, [preferences]);
 
   useEffect(() => {
+    // on boot try indexedDB first, stream the demo blob if we are empty
     (async () => {
       const stored = await getAllVulnerabilities();
       if (stored.length === 0) {

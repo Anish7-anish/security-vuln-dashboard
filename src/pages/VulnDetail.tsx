@@ -18,6 +18,7 @@ const VulnDetail: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
+      // allow people to jump in via either the composite id or plain CVE
       const target = decodeURIComponent(id ?? '').trim();
       const targetLower = target.toLowerCase();
       let found =

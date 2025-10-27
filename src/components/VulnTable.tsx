@@ -102,12 +102,13 @@ export default function VulnTable({ data }: { data: Vulnerability[] }) {
 
   if (needsVirtual) {
     return (
-      <div className="virtual-table">
-        <Table
-          className="virtual-table__header"
-          columns={columns}
-          dataSource={[]}
-          pagination={false}
+    <div className="virtual-table">
+      {/* make a fake table header so the columns stay aligned with the virtual rows */}
+      <Table
+        className="virtual-table__header"
+        columns={columns}
+        dataSource={[]}
+        pagination={false}
           rowKey="__key"
           tableLayout="fixed"
           bordered

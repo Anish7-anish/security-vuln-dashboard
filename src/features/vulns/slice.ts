@@ -70,6 +70,7 @@ const normalizeSeverity = (value?: string): keyof typeof severityScore => {
 };
 
 const applySort = (rows: Vulnerability[], sortBy: SortKey, direction: SortDirection) => {
+  // shuffle order keeping the same array so table updates stay cheap
   const dir = direction === 'asc' ? 1 : -1;
   rows.sort((a, b) => {
     let diff = 0;
@@ -117,6 +118,7 @@ const applySort = (rows: Vulnerability[], sortBy: SortKey, direction: SortDirect
 };
 
 const recomputeFiltered = (state: VulnState) => {
+  // start from scratch every time so filters never stack weirdly
   const query = state.q.trim().toLowerCase();
   let rows = [...state.data];
 
@@ -139,6 +141,7 @@ const recomputeFiltered = (state: VulnState) => {
   }
 
   if (state.riskFactors.size) {
+    // each vuln can have many risk flags, we keep it if any overlap
     rows = rows.filter((v) =>
       normalizeRiskFactors(v.riskFactors).some((r) => state.riskFactors.has(r)),
     );
@@ -181,6 +184,7 @@ const recomputeFiltered = (state: VulnState) => {
   }
 
   state.filtered = rows;
+  // final result always respects current sort
   applySort(state.filtered, state.sortBy, state.sortDirection);
 };
 

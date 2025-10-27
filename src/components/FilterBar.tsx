@@ -96,6 +96,7 @@ export default function FilterBar() {
   const [exporting, setExporting] = React.useState<'csv' | 'json' | null>(null);
 
   React.useEffect(() => {
+    // keep input box in sync whenever query is changed elsewhere
     setSearchValue(q ?? '');
   }, [q]);
 
@@ -112,6 +113,7 @@ export default function FilterBar() {
     const matches: string[] = [];
 
     for (const vuln of data) {
+      // grab interesting bits off each vuln so the user can find stuff quickly
       const candidates = [
         vuln.cve,
         (vuln as any).package ?? (vuln as any).packageName,
@@ -206,6 +208,7 @@ export default function FilterBar() {
 
   const handleCvssChange = (value: number | number[]) => {
     if (!Array.isArray(value)) return;
+    // slider delivers floats so we clamp and normalise everything here
     const next = normaliseCvssRange(value as CvssRange);
     dispatch(setCvssRange(next));
   };
@@ -225,6 +228,7 @@ export default function FilterBar() {
     next[index] = clamped;
 
     if (index === 0 && next[0] > next[1]) {
+      // if the left handle crosses we drag the other end with it
       next[1] = clamped;
     } else if (index === 1 && next[1] < next[0]) {
       next[0] = clamped;
@@ -251,6 +255,7 @@ export default function FilterBar() {
     if (!filtered.length || exporting) return;
     setExporting(format);
     try {
+      // tiny delay gives the spinner a chance to render before the heavy work
       await new Promise((resolve) => setTimeout(resolve, 0));
       const blob = format === 'csv' ? exportAsCsv(filtered) : exportAsJson(filtered);
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

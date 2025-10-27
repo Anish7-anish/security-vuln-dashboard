@@ -20,6 +20,7 @@ export default function VulnQuickLookup() {
   const all = useSelector((s: RootState) => s.vulns.data);
 
   const suggestions = useMemo(() => {
+    // build a quick list of suggestions so the dropdown feels instant
     const entries: Suggestion[] = [];
     const seen = new Set<string>();
     for (const vuln of all) {
