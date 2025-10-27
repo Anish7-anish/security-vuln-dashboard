@@ -2,20 +2,18 @@
 
 React + Vite dashboard for exploring a very large vulnerability dataset. We fetch a JSON snapshot, stream it through a web worker into IndexedDB, and drive the UI from Redux so filters stay in sync across screens.
 
----
+
 ### Deployment
 - Vercel: https://security-vuln-dashboard.vercel.app (first visit may take some time while the JSON streams into IndexedDB)
 
-**Quick start**
+
+## Getting Started
+
+### Clone the Repository
 ```bash
 git clone https://github.com/anish/security-vuln-dashboard.git
 cd security-vuln-dashboard
-npm install
-npm run dev
 ```
-
-
-## Getting Started
 
 ### Prerequisites
 - Node.js 18+
@@ -30,6 +28,7 @@ npm install
 ```bash
 npm run dev
 ```
+
 Two notes when you run it the first time:
 1. The backend-free build pulls the public data straight from GitHub’s LFS mirror. If you want to point at your own copy, set `VITE_DATA_URL` before you start Vite. Dropping the file in `public/ui_demo.json` still works; just point `VITE_DATA_URL` back to `/ui_demo.json`.
 2. The worker streams the whole 389 MB JSON into IndexedDB. The banner spinner will show how many rows have landed; once it hits ~236k you’re cached and reloads are instant.
@@ -52,7 +51,7 @@ We persist the full JSON into IndexedDB. To force a fresh import:
 2. Right-click `vuln-db` → **Delete database**.
 3. Reload the app; the worker will stream `public/ui_demo.json` again.
 
----
+
 
 ## Architecture Overview
 
@@ -80,7 +79,7 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
   - `SearchPage` reuses the filter + table stack on a white canvas for focused querying.
   - `VulnDetail` shows an individual record, falling back to IndexedDB if the Redux cache hasn’t loaded yet.
 
----
+
 
 ## Component Architecture & Data Flow
 
@@ -113,7 +112,7 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 ### Preference Toggles
 - Stored under `svd-dashboard-preferences` in `localStorage`, so the dashboard remembers which tiles you’ve hidden. Each toggle simply flips a boolean in local component state; the state persists on layout changes.
 
----
+
 
 ## Decisions & Trade-offs
 
@@ -127,7 +126,7 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 - **Virtual scroll > always-on pagination**: Paging through hundreds of CVEs was painful, so big result sets stay in a single, virtualized scroll while smaller ones keep the familiar paginated view. Feels more fluid and the DOM stays lean.
 - **Lazy chunks for charts/routes**: Pulled the chart bundle, repo comparison, and secondary pages behind `React.lazy` so the dashboard boots faster and streams in the heavy stuff only when we actually visit it, with Suspense spinners covering the gap.
 
----
+
 
 ## Development Notes
 
