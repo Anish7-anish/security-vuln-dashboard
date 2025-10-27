@@ -14,7 +14,7 @@ import {
   Empty,
   Alert,
 } from 'antd';
-import { streamIntoDB, getAllVulnerabilities, DATA_URL } from '../data/loader';
+import { streamIntoDB, getAllVulnerabilities, DATA_URL, EXPECTED_TOTAL } from '../data/loader';
 import { setData } from '../features/vulns/slice';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
@@ -92,6 +92,7 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(true);
   const bootstrapped = useRef(false);
+  const [progressCount, setProgressCount] = useState<number | null>(null);
   const [preferences, setPreferences] = useState<DashboardPreferences>(() => {
     try {
       const stored = localStorage.getItem(PREFERENCE_KEY);
@@ -116,11 +117,12 @@ export default function Dashboard() {
       bootstrapped.current = true;
       const stored = await getAllVulnerabilities();
       if (stored.length === 0) {
-        await streamIntoDB(DATA_URL);
+        await streamIntoDB(DATA_URL, (count) => setProgressCount(count));
       }
       const data = await getAllVulnerabilities();
       dispatch(setData(data));
       setLoading(false);
+      setProgressCount(null);
     })();
   }, [dispatch]);
 
@@ -209,7 +211,18 @@ export default function Dashboard() {
         </Card>
 
         {loading ? (
-          <Spin size="large" style={{ marginTop: 120, display: 'block' }} />
+          <Spin
+            size="large"
+            tip={
+              progressCount
+                ? `Streaming vulnerabilities… ${progressCount.toLocaleString()} loaded (${Math.min(
+                    100,
+                    Math.round((progressCount / EXPECTED_TOTAL) * 100),
+                  )}%)`
+                : 'Streaming vulnerabilities…'
+            }
+            style={{ marginTop: 120, display: 'block' }}
+          />
         ) : (
           <Space direction="vertical" size={24} style={{ width: '100%' }}>
             <Row gutter={[16, 16]}>
