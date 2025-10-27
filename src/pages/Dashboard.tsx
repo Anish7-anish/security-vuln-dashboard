@@ -92,10 +92,7 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(true);
   const bootstrapped = useRef(false);
-<<<<<<< HEAD
   const [progressCount, setProgressCount] = useState<number | null>(null);
-=======
->>>>>>> origin/main
   const [preferences, setPreferences] = useState<DashboardPreferences>(() => {
     try {
       const stored = localStorage.getItem(PREFERENCE_KEY);
