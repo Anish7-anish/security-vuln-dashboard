@@ -6,7 +6,10 @@ const REMOTE_DATA =
   'https://media.githubusercontent.com/media/chanduusc/Ui-Demo-Data/main/ui_demo.json?raw=1';
 export const DATA_URL =
   import.meta.env.VITE_DATA_URL || REMOTE_DATA;
+<<<<<<< HEAD
 export const EXPECTED_TOTAL = 236656;
+=======
+>>>>>>> origin/main
 
 const DB_NAME = 'vuln-db';
 const DB_VERSION = 2;
