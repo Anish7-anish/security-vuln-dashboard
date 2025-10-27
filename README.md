@@ -19,7 +19,14 @@ npm install
 ```bash
 npm run dev
 ```
-Vite prints a localhost URL. Visit it and keep DevTools open the first time so you can watch the worker stream data.
+Two notes when you run it the first time:
+1. The backend-free build pulls the public data straight from GitHub’s LFS mirror. If you want to point at your own copy, set `VITE_DATA_URL` before you start Vite. Dropping the file in `public/ui_demo.json` still works; just point `VITE_DATA_URL` back to `/ui_demo.json`.
+2. The worker streams the whole 389 MB JSON into IndexedDB. The banner spinner will show how many rows have landed; once it hits ~236k you’re cached and reloads are instant.
+
+Example with a custom URL:
+```bash
+VITE_DATA_URL=https://example.com/ui_demo.json npm run dev
+```
 
 ### Build for production
 ```bash
