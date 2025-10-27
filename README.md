@@ -3,6 +3,8 @@
 React + Vite dashboard for exploring a very large vulnerability dataset. We fetch a JSON snapshot, stream it through a web worker into IndexedDB, and drive the UI from Redux so filters stay in sync across screens.
 
 ---
+### Deployment
+- Vercel: https://security-vuln-dashboard.vercel.app (first visit may take some time while the JSON streams into IndexedDB)
 
 **Quick start**
 ```bash
@@ -134,5 +136,3 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 - Tests aren’t wired yet. When we stabilise the dataset, we can add store-level tests to verify filtering math.
 
 Happy dashboarding!
-### Deployment
-- Vercel: https://security-vuln-dashboard.vercel.app (first visit may take ~30s while the JSON streams into IndexedDB)
