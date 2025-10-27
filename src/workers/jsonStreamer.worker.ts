@@ -51,7 +51,7 @@ type Msg =
   | { type: "done"; count: number }
   | { type: "error"; error: string };
 
-const CHUNK_SIZE = 20000;
+const CHUNK_SIZE = 8000;
 
 self.onmessage = async (e: MessageEvent) => {
   const { url } = e.data;
@@ -98,7 +98,7 @@ self.onmessage = async (e: MessageEvent) => {
 
             // Send chunk
             if (items.length >= CHUNK_SIZE) {
-              self.postMessage({ type: "chunk", items });
+              self.postMessage({ type: "chunk", items, progress: totalCount });
               items = [];
             }
           }
@@ -109,7 +109,7 @@ self.onmessage = async (e: MessageEvent) => {
       await new Promise(requestAnimationFrame);
     }
 
-    if (items.length > 0) self.postMessage({ type: "chunk", items });
+    if (items.length > 0) self.postMessage({ type: "chunk", items, progress: totalCount });
 
     console.log("🏁 Worker done. Total vulns:", totalCount);
     self.postMessage({ type: "done", count: totalCount });

@@ -6,6 +6,7 @@ const REMOTE_DATA =
   'https://media.githubusercontent.com/media/chanduusc/Ui-Demo-Data/main/ui_demo.json?raw=1';
 export const DATA_URL =
   import.meta.env.VITE_DATA_URL || REMOTE_DATA;
+export const EXPECTED_TOTAL = 236656;
 
 const DB_NAME = 'vuln-db';
 const DB_VERSION = 2;
@@ -75,7 +76,10 @@ export async function ensureDB() {
 // }
 let activeWorker: Worker | null = null;
 
-export async function streamIntoDB(url: string) {
+export async function streamIntoDB(
+  url: string,
+  onProgress?: (count: number) => void,
+) {
   if (activeWorker) {
     console.warn("⚠️ Worker already active, skipping duplicate run");
     return;
@@ -93,12 +97,18 @@ export async function streamIntoDB(url: string) {
         const store = tx.store;
         for (const item of msg.items) store.put(item);
         await tx.done;
+        if (typeof msg.progress === 'number') {
+          onProgress?.(msg.progress);
+        }
       } 
       else if (msg.type === 'done') {
         console.log("✅ Stream completed.");
         worker.terminate();
         activeWorker = null;
         resolve();
+        if (typeof msg.count === 'number') {
+          onProgress?.(msg.count);
+        }
       } 
       else if (msg.type === 'error') {
         console.error("❌ Worker error:", msg.error);
