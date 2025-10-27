@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, Suspense, lazy } from 'react';
+import React, { useEffect, useState, useMemo, Suspense, lazy, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Layout,
@@ -91,6 +91,7 @@ export default function Dashboard() {
   const highlights = useSelector(selectCriticalHighlights);
 
   const [loading, setLoading] = useState(true);
+  const bootstrapped = useRef(false);
   const [preferences, setPreferences] = useState<DashboardPreferences>(() => {
     try {
       const stored = localStorage.getItem(PREFERENCE_KEY);
@@ -111,6 +112,8 @@ export default function Dashboard() {
   useEffect(() => {
     // on boot try indexedDB first, stream the demo blob if we are empty
     (async () => {
+      if (bootstrapped.current) return;
+      bootstrapped.current = true;
       const stored = await getAllVulnerabilities();
       if (stored.length === 0) {
         await streamIntoDB(DATA_URL);
