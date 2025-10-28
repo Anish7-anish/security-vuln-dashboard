@@ -16,10 +16,15 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
 
-import { chain } from 'stream-chain';
-import { parser } from 'stream-json';
-import { pick } from 'stream-json/filters/Pick';
-import { streamObject } from 'stream-json/streamers/StreamObject';
+import StreamChain from 'stream-chain';
+import StreamJson from 'stream-json';
+import PickModule from 'stream-json/filters/Pick.js';
+import StreamObjectModule from 'stream-json/streamers/StreamObject.js';
+
+const { chain } = StreamChain;
+const { parser } = StreamJson;
+const { pick } = PickModule;
+const { streamObject } = StreamObjectModule;
 
 const DEFAULT_INPUT = 'public/ui_demo.json';
 const DEFAULT_OUTPUT = 'public/chunks';
@@ -118,7 +123,6 @@ async function main() {
           const serialized = JSON.stringify(record);
           const size = Buffer.byteLength(serialized, 'utf8');
 
-          // flush if adding this record would blow the chunk
           if (rows.length > 0 && (approxBytes + size > CHUNK_BYTES || rows.length >= MAX_ROWS_PER_CHUNK)) {
             const { fileName, size: written } = await writeChunk(chunkIndex, rows);
             manifest.chunks.push({ url: fileName, count: rows.length, bytes: written });
