@@ -57,6 +57,43 @@ type WorkerRequest = {
 };
 
 const CHUNK_SIZE = 8000;
+const LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec";
+
+const sleepFrame = () => new Promise(requestAnimationFrame);
+
+async function loadJsonFromSources(sources: string[]): Promise<any> {
+  let lastError: unknown = null;
+
+  for (const candidate of sources) {
+    try {
+      console.log("🔗 Attempting fetch:", candidate);
+      const res = await fetch(candidate, { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch JSON (${res.status}) from ${candidate}`);
+      }
+
+      const text = await res.text();
+      const trimmed = text.trimStart();
+
+      if (trimmed.startsWith(LFS_POINTER_PREFIX)) {
+        throw new Error(
+          "Git LFS pointer detected (blob not downloaded). Run `git lfs pull` so public/ui_demo.json is available."
+        );
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`Invalid JSON from ${candidate}: ${parseErr instanceof Error ? parseErr.message : parseErr}`);
+      }
+    } catch (err) {
+      lastError = err;
+      console.error("⚠️ Source failed:", candidate, err);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Failed to load dataset from all sources");
+}
 
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const payload = e.data ?? {};
@@ -74,32 +111,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   console.log("👷 Worker started (yield-enabled). Sources:", sources);
 
   try {
-    let response: Response | null = null;
-    let lastError: unknown = null;
-
-    for (const candidate of sources) {
-      try {
-        console.log("🔗 Attempting fetch:", candidate);
-        const res = await fetch(candidate, { cache: "no-store" });
-        if (!res.ok) {
-          throw new Error(`Failed to fetch JSON (${res.status}) from ${candidate}`);
-        }
-        response = res;
-        break;
-      } catch (err) {
-        lastError = err;
-        console.error("⚠️ Fetch failed:", candidate, err);
-      }
-    }
-
-    if (!response) {
-      const message =
-        lastError instanceof Error ? lastError.message : "Failed to fetch any data source";
-      throw new Error(message);
-    }
-
-    const text = await response.text();
-    const json = JSON.parse(text);
+    const json = await loadJsonFromSources(sources);
 
     let totalCount = 0;
     let items: Vulnerability[] = [];
@@ -144,7 +156,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       }
 
       // 💤 yield control every group iteration
-      await new Promise(requestAnimationFrame);
+      await sleepFrame();
     }
 
     if (items.length > 0) self.postMessage({ type: "chunk", items, progress: totalCount });

@@ -31,9 +31,10 @@ npm run dev
 ```
 
 Two notes when you run it the first time:
-1. The dashboard now defaults to the bundled `public/ui_demo.json`, so local dev and Vercel builds read from the same fast static file. If you want to point at a different snapshot, set `VITE_DATA_URL` before you start Vite (or before building).
-2. The worker streams the whole 389 MB JSON into IndexedDB. The banner spinner will show how many rows have landed; once it hits ~236k you’re cached and reloads are instant.
-3. Because of that streaming, expect the dev server to sit on a loading spinner for a bit on first boot—same story as production.
+1. Make sure the dataset is actually present locally: run `git lfs pull` so `public/ui_demo.json` is downloaded (the build will fail if only the Git LFS pointer exists).
+2. The dashboard now defaults to the bundled `public/ui_demo.json`, so local dev and Vercel builds read from the same fast static file. If you want to point at a different snapshot, set `VITE_DATA_URL` before you start Vite (or before building).
+3. The worker streams the whole 389 MB JSON into IndexedDB. The banner spinner will show how many rows have landed; once it hits ~236k you’re cached and reloads are instant.
+4. Because of that streaming, expect the dev server to sit on a loading spinner for a bit on first boot—same story as production.
 
 Example with a custom data URL:
 ```bash

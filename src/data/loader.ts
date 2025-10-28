@@ -3,14 +3,11 @@ import { Vulnerability } from './types';
 import workerUrl from '../workers/jsonStreamer.worker?worker&url';
 
 const LOCAL_DATA_PATH = '/ui_demo.json';
-const REMOTE_DATA =
-  'https://media.githubusercontent.com/media/chanduusc/Ui-Demo-Data/main/ui_demo.json?raw=1';
-
 const envDataUrl = import.meta.env.VITE_DATA_URL;
 
 export const DATA_SOURCES = envDataUrl
   ? [envDataUrl]
-  : [LOCAL_DATA_PATH, REMOTE_DATA];
+  : [LOCAL_DATA_PATH];
 
 export const DATA_URL = DATA_SOURCES[0];
 export const EXPECTED_TOTAL = 236656;
