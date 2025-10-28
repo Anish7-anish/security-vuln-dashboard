@@ -1,4 +1,4 @@
-import { openDB, type IDBPDatabase } from 'idb';
+import { openDB, deleteDB, type IDBPDatabase } from 'idb';
 import { Vulnerability } from './types';
 import workerUrl from '../workers/jsonStreamer.worker?worker&url';
 
@@ -8,7 +8,7 @@ export const DATA_URL =
   import.meta.env.VITE_DATA_URL || REMOTE_DATA;
 export const EXPECTED_TOTAL = 236656;
 
-const DB_NAME = 'vuln-db';
+export const DB_NAME = 'vuln-db';
 const DB_VERSION = 2;
 const STORE = 'vulns';
 
@@ -79,17 +79,18 @@ let activeWorker: Worker | null = null;
 export async function streamIntoDB(
   url: string,
   onProgress?: (count: number) => void,
-) {
+): Promise<number | null> {
   if (activeWorker) {
     console.warn("⚠️ Worker already active, skipping duplicate run");
-    return;
+    return null;
   }
 
   const db = await ensureDB();
   const worker = new Worker(workerUrl, { type: 'module' });
   activeWorker = worker;
 
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<number | null>((resolve, reject) => {
+    let lastProgress = 0;
     worker.onmessage = async (e) => {
       const msg = e.data;
       if (msg.type === 'chunk') {
@@ -98,6 +99,11 @@ export async function streamIntoDB(
         for (const item of msg.items) store.put(item);
         await tx.done;
         if (typeof msg.progress === 'number') {
+          lastProgress = msg.progress;
+        } else {
+          lastProgress += msg.items.length;
+        }
+        if (typeof msg.progress === 'number') {
           onProgress?.(msg.progress);
         }
       } 
@@ -105,7 +111,9 @@ export async function streamIntoDB(
         console.log("✅ Stream completed.");
         worker.terminate();
         activeWorker = null;
-        resolve();
+        const total =
+          typeof msg.count === 'number' ? msg.count : lastProgress || null;
+        resolve(total);
         if (typeof msg.count === 'number') {
           onProgress?.(msg.count);
         }
@@ -126,6 +134,27 @@ export async function streamIntoDB(
 
     worker.postMessage({ url });
   });
+}
+
+export async function clearDatabase() {
+  if (activeWorker) {
+    activeWorker.terminate();
+    activeWorker = null;
+  }
+  if (dbPromise) {
+    try {
+      const db = await dbPromise;
+      db.close();
+    } catch (e) {
+      console.warn('Failed closing DB before reset', e);
+    }
+    dbPromise = null;
+  }
+  try {
+    await deleteDB(DB_NAME);
+  } catch (e) {
+    console.warn('Failed deleting DB', e);
+  }
 }
 
 

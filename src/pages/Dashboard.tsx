@@ -14,7 +14,13 @@ import {
   Empty,
   Alert,
 } from 'antd';
-import { streamIntoDB, getAllVulnerabilities, DATA_URL, EXPECTED_TOTAL } from '../data/loader';
+import {
+  streamIntoDB,
+  getAllVulnerabilities,
+  DATA_URL,
+  EXPECTED_TOTAL,
+  clearDatabase,
+} from '../data/loader';
 import { setData } from '../features/vulns/slice';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
@@ -93,6 +99,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const bootstrapped = useRef(false);
   const [progressCount, setProgressCount] = useState<number | null>(null);
+  const [importWarning, setImportWarning] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<DashboardPreferences>(() => {
     try {
       const stored = localStorage.getItem(PREFERENCE_KEY);
@@ -111,19 +118,64 @@ export default function Dashboard() {
   }, [preferences]);
 
   useEffect(() => {
-    // on boot try indexedDB first, stream the demo blob if we are empty
-    (async () => {
-      if (bootstrapped.current) return;
-      bootstrapped.current = true;
-      const stored = await getAllVulnerabilities();
-      if (stored.length === 0) {
-        await streamIntoDB(DATA_URL, (count) => setProgressCount(count));
+    if (bootstrapped.current) return;
+    bootstrapped.current = true;
+
+    const hydrate = async () => {
+      const importData = async (attempt = 0): Promise<number | null> => {
+        try {
+          const total = await streamIntoDB(DATA_URL, (count) => setProgressCount(count));
+          if ((total ?? 0) < EXPECTED_TOTAL && attempt < 1) {
+            await clearDatabase();
+            setProgressCount(null);
+            return importData(attempt + 1);
+          }
+          return total ?? null;
+        } catch (err) {
+          console.error('Streaming failed', err);
+          if (attempt < 1) {
+            await clearDatabase();
+            setProgressCount(null);
+            return importData(attempt + 1);
+          }
+          return null;
+        } finally {
+          setProgressCount(null);
+        }
+      };
+
+      try {
+        let data = await getAllVulnerabilities();
+        let totalLoaded = data.length;
+
+        if (totalLoaded < EXPECTED_TOTAL) {
+          await clearDatabase();
+          setProgressCount(null);
+          const streamed = await importData();
+          data = await getAllVulnerabilities();
+          totalLoaded = data.length;
+
+          if ((streamed ?? totalLoaded) < EXPECTED_TOTAL) {
+            setImportWarning(
+              `Loaded ${totalLoaded.toLocaleString()} of ${EXPECTED_TOTAL.toLocaleString()} records. Try reloading on a stable connection if you need the full dataset.`,
+            );
+          } else {
+            setImportWarning(null);
+          }
+        } else {
+          setImportWarning(null);
+        }
+
+        dispatch(setData(data));
+      } catch (err) {
+        console.error('Hydration failed', err);
+        setImportWarning('Failed to stream vulnerabilities. Showing whatever was cached.');
+      } finally {
+        setLoading(false);
       }
-      const data = await getAllVulnerabilities();
-      dispatch(setData(data));
-      setLoading(false);
-      setProgressCount(null);
-    })();
+    };
+
+    hydrate();
   }, [dispatch]);
 
   const togglePreference = (key: keyof DashboardPreferences) => (checked: boolean) => {
@@ -225,6 +277,9 @@ export default function Dashboard() {
           />
         ) : (
           <Space direction="vertical" size={24} style={{ width: '100%' }}>
+            {importWarning && (
+              <Alert type="warning" showIcon message={importWarning} />
+            )}
             <Row gutter={[16, 16]}>
               {preferences.showKPIs && (
                 <Col xs={24} lg={12} xl={12}>
