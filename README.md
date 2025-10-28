@@ -31,20 +31,33 @@ npm run dev
 ```
 
 Two notes when you run it the first time:
-1. The backend-free build pulls the public data straight from GitHub’s LFS mirror. If you want to point at your own copy, set `VITE_DATA_URL` before you start Vite. Dropping the file in `public/ui_demo.json` still works; just point `VITE_DATA_URL` back to `/ui_demo.json`.
+1. The dashboard now defaults to the bundled `public/ui_demo.json`, so local dev and Vercel builds read from the same fast static file. If you want to point at a different snapshot, set `VITE_DATA_URL` before you start Vite (or before building).
 2. The worker streams the whole 389 MB JSON into IndexedDB. The banner spinner will show how many rows have landed; once it hits ~236k you’re cached and reloads are instant.
 3. Because of that streaming, expect the dev server to sit on a loading spinner for a bit on first boot—same story as production.
 
-Example with a custom URL:
+Example with a custom data URL:
 ```bash
 VITE_DATA_URL=https://example.com/ui_demo.json npm run dev
 ```
+
+### Deploying to Vercel
+- Add an environment variable `VITE_DATA_URL` with the value `/ui_demo.json` so the deployed build streams from the static asset you ship with the app.
+- Ship the large JSON via Git LFS (see below) or host it on your own CDN if you prefer to keep the repository lean.
 
 ### Build for production 
 ```bash
 npm run build
 ```
 Artifacts land in `dist/`.
+
+### Large dataset (Git LFS)
+The `public/ui_demo.json` archive weighs ~389 MB. The repository is configured to store it via [Git LFS](https://git-lfs.com/):
+```bash
+git lfs install
+git lfs track "public/ui_demo.json"
+git add .gitattributes public/ui_demo.json
+```
+If the file already exists in history, run `git lfs migrate import --include="public/ui_demo.json"` once to rewrite past commits before pushing.
 
 ### Resetting the local dataset
 We persist the full JSON into IndexedDB. To force a fresh import:

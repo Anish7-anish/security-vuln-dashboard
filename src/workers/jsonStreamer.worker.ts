@@ -47,20 +47,58 @@
 import type { Vulnerability } from "../data/types";
 
 type Msg =
-  | { type: "chunk"; items: Vulnerability[] }
+  | { type: "chunk"; items: Vulnerability[]; progress?: number }
   | { type: "done"; count: number }
   | { type: "error"; error: string };
 
+type WorkerRequest = {
+  urls?: string[];
+  url?: string;
+};
+
 const CHUNK_SIZE = 8000;
 
-self.onmessage = async (e: MessageEvent) => {
-  const { url } = e.data;
-  console.log("👷 Worker started (yield-enabled):", url);
+self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
+  const payload = e.data ?? {};
+  const sources = Array.isArray(payload.urls) && payload.urls.length
+    ? payload.urls
+    : payload.url
+    ? [payload.url]
+    : [];
+
+  if (!sources.length) {
+    self.postMessage({ type: "error", error: "No data sources supplied to worker" });
+    return;
+  }
+
+  console.log("👷 Worker started (yield-enabled). Sources:", sources);
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch JSON (${res.status})`);
-    const text = await res.text();
+    let response: Response | null = null;
+    let lastError: unknown = null;
+
+    for (const candidate of sources) {
+      try {
+        console.log("🔗 Attempting fetch:", candidate);
+        const res = await fetch(candidate, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch JSON (${res.status}) from ${candidate}`);
+        }
+        response = res;
+        break;
+      } catch (err) {
+        lastError = err;
+        console.error("⚠️ Fetch failed:", candidate, err);
+      }
+    }
+
+    if (!response) {
+      const message =
+        lastError instanceof Error ? lastError.message : "Failed to fetch any data source";
+      throw new Error(message);
+    }
+
+    const text = await response.text();
     const json = JSON.parse(text);
 
     let totalCount = 0;
@@ -115,6 +153,9 @@ self.onmessage = async (e: MessageEvent) => {
     self.postMessage({ type: "done", count: totalCount });
   } catch (err: any) {
     console.error("❌ Worker error:", err);
-    self.postMessage({ type: "error", error: err.message });
+    self.postMessage({
+      type: "error",
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 };

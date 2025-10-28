@@ -2,10 +2,17 @@ import { openDB, type IDBPDatabase } from 'idb';
 import { Vulnerability } from './types';
 import workerUrl from '../workers/jsonStreamer.worker?worker&url';
 
+const LOCAL_DATA_PATH = '/ui_demo.json';
 const REMOTE_DATA =
   'https://media.githubusercontent.com/media/chanduusc/Ui-Demo-Data/main/ui_demo.json?raw=1';
-export const DATA_URL =
-  import.meta.env.VITE_DATA_URL || REMOTE_DATA;
+
+const envDataUrl = import.meta.env.VITE_DATA_URL;
+
+export const DATA_SOURCES = envDataUrl
+  ? [envDataUrl]
+  : [LOCAL_DATA_PATH, REMOTE_DATA];
+
+export const DATA_URL = DATA_SOURCES[0];
 export const EXPECTED_TOTAL = 236656;
 
 const DB_NAME = 'vuln-db';
@@ -77,7 +84,7 @@ export async function ensureDB() {
 let activeWorker: Worker | null = null;
 
 export async function streamIntoDB(
-  url: string,
+  urls: string[] | string,
   onProgress?: (count: number) => void,
 ) {
   if (activeWorker) {
@@ -88,6 +95,12 @@ export async function streamIntoDB(
   const db = await ensureDB();
   const worker = new Worker(workerUrl, { type: 'module' });
   activeWorker = worker;
+
+  const sourceList = Array.isArray(urls) ? urls : [urls];
+  if (sourceList.length === 0) {
+    activeWorker = null;
+    throw new Error('No data sources provided for streamIntoDB');
+  }
 
   return new Promise<void>((resolve, reject) => {
     worker.onmessage = async (e) => {
@@ -124,7 +137,7 @@ export async function streamIntoDB(
       reject(err);
     };
 
-    worker.postMessage({ url });
+    worker.postMessage({ urls: sourceList });
   });
 }
 

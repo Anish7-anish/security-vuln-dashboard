@@ -14,7 +14,7 @@ import {
   Empty,
   Alert,
 } from 'antd';
-import { streamIntoDB, getAllVulnerabilities, DATA_URL, EXPECTED_TOTAL } from '../data/loader';
+import { streamIntoDB, getAllVulnerabilities, DATA_SOURCES, EXPECTED_TOTAL } from '../data/loader';
 import { setData } from '../features/vulns/slice';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
@@ -93,6 +93,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const bootstrapped = useRef(false);
   const [progressCount, setProgressCount] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [countMismatch, setCountMismatch] = useState<number | null>(null);
   const [preferences, setPreferences] = useState<DashboardPreferences>(() => {
     try {
       const stored = localStorage.getItem(PREFERENCE_KEY);
@@ -115,14 +117,37 @@ export default function Dashboard() {
     (async () => {
       if (bootstrapped.current) return;
       bootstrapped.current = true;
-      const stored = await getAllVulnerabilities();
-      if (stored.length === 0) {
-        await streamIntoDB(DATA_URL, (count) => setProgressCount(count));
+      try {
+        setLoadError(null);
+        setCountMismatch(null);
+
+        const stored = await getAllVulnerabilities();
+        if (stored.length === 0) {
+          try {
+            await streamIntoDB(DATA_SOURCES, (count) => setProgressCount(count));
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("⚠️ Stream failed:", message);
+            setLoadError(message);
+          }
+        }
+
+        const data = await getAllVulnerabilities();
+        dispatch(setData(data));
+
+        if (data.length !== EXPECTED_TOTAL) {
+          setCountMismatch(data.length);
+        } else {
+          setCountMismatch(null);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("💥 Failed to bootstrap dashboard:", message);
+        setLoadError(message);
+      } finally {
+        setLoading(false);
+        setProgressCount(null);
       }
-      const data = await getAllVulnerabilities();
-      dispatch(setData(data));
-      setLoading(false);
-      setProgressCount(null);
     })();
   }, [dispatch]);
 
@@ -203,6 +228,26 @@ export default function Dashboard() {
             </Space>
           </Space>
         </Space>
+
+        {loadError && (
+          <Alert
+            style={{ marginTop: 16 }}
+            type="error"
+            showIcon
+            message="Failed to stream vulnerability dataset"
+            description={`The data worker stopped with: ${loadError}. Check your network connection or configure VITE_DATA_URL to a reachable JSON file.`}
+          />
+        )}
+
+        {countMismatch !== null && (
+          <Alert
+            style={{ marginTop: 16 }}
+            type="warning"
+            showIcon
+            message="Dataset looks incomplete"
+            description={`Indexed ${countMismatch.toLocaleString()} rows, but expected about ${EXPECTED_TOTAL.toLocaleString()}. Try clearing IndexedDB and reloading once the data source is stable.`}
+          />
+        )}
 
         <Divider style={{ borderColor: 'rgba(255,255,255,0.15)', margin: '1rem 0 1.5rem' }} />
 
