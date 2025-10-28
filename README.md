@@ -6,6 +6,7 @@ React + Vite dashboard for exploring a very large vulnerability dataset. We fetc
 ### Deployment
 - Vercel: https://security-vuln-dashboard.vercel.app (first visit may take some time while the JSON streams into IndexedDB)
 
+![Demo](assets/security-vul-dashboard-ezgif.com-video-to-gif-converter.gif)
 
 ## Getting Started
 
