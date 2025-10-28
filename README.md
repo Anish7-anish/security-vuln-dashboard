@@ -39,7 +39,7 @@ Example with a custom URL:
 VITE_DATA_URL=https://example.com/ui_demo.json npm run dev
 ```
 
-### Build for production
+### Build for production 
 ```bash
 npm run build
 ```
