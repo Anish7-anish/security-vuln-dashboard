@@ -35,7 +35,6 @@ Two notes when you run it the first time:
 2. The dashboard now defaults to the bundled `public/ui_demo.json`, so local dev and Vercel builds read from the same fast static file. If you want to point at a different snapshot, set `VITE_DATA_URL` before you start Vite (or before building).
 3. The worker streams the whole 389 MB JSON into IndexedDB. The banner spinner will show how many rows have landed; once it hits ~236k you’re cached and reloads are instant.
 4. Because of that streaming, expect the dev server to sit on a loading spinner for a bit on first boot—same story as production.
-5. The `postinstall` npm script automatically runs `git lfs pull`; Vercel will therefore download the dataset during its install step as long as the project has Git LFS enabled.
 
 Example with a custom data URL:
 ```bash
@@ -44,6 +43,7 @@ VITE_DATA_URL=https://example.com/ui_demo.json npm run dev
 
 ### Deploying to Vercel
 - Add an environment variable `VITE_DATA_URL` with the value `/ui_demo.json` so the deployed build streams from the static asset you ship with the app.
+- Enable Git LFS in the build environment by setting `VERCEL_GIT_LFS=1`; Vercel will run `git lfs pull` automatically during checkout.
 - Ship the large JSON via Git LFS (see below) or host it on your own CDN if you prefer to keep the repository lean.
 
 ### Build for production 
