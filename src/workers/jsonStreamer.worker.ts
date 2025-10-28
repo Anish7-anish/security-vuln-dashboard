@@ -61,6 +61,63 @@ const LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec";
 
 const sleepFrame = () => new Promise(requestAnimationFrame);
 
+const textDecoder = new TextDecoder();
+
+async function readResponseBody(res: Response): Promise<ArrayBuffer> {
+  if (!res.body) {
+    return res.arrayBuffer();
+  }
+
+  const chunks: Uint8Array[] = [];
+  const reader = res.body.getReader();
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const merged = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged.buffer;
+}
+
+async function bufferToJson(buffer: ArrayBuffer, source: string): Promise<any> {
+  const view = new Uint8Array(buffer);
+  const prefix = textDecoder.decode(view.subarray(0, Math.min(view.length, 80)));
+
+  if (prefix.startsWith(LFS_POINTER_PREFIX)) {
+    throw new Error(
+      "Git LFS pointer detected (blob not downloaded). Ensure the release asset contains the actual JSON payload."
+    );
+  }
+
+  let dataBuffer = buffer;
+  const lower = source.toLowerCase();
+  if (lower.endsWith(".gz") || lower.endsWith(".gzip")) {
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("Browser lacks gzip support (DecompressionStream unavailable).");
+    }
+    const stream = new Response(buffer).body?.pipeThrough(new DecompressionStream("gzip"));
+    if (!stream) throw new Error("Failed to create gzip decompression stream.");
+    dataBuffer = await new Response(stream).arrayBuffer();
+  }
+
+  const text = textDecoder.decode(dataBuffer);
+
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(`Invalid JSON from ${source}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 async function loadJsonFromSources(sources: string[]): Promise<any> {
   let lastError: unknown = null;
 
@@ -72,20 +129,8 @@ async function loadJsonFromSources(sources: string[]): Promise<any> {
         throw new Error(`Failed to fetch JSON (${res.status}) from ${candidate}`);
       }
 
-      const text = await res.text();
-      const trimmed = text.trimStart();
-
-      if (trimmed.startsWith(LFS_POINTER_PREFIX)) {
-        throw new Error(
-          "Git LFS pointer detected (blob not downloaded). Run `git lfs pull` so public/ui_demo.json is available."
-        );
-      }
-
-      try {
-        return JSON.parse(text);
-      } catch (parseErr) {
-        throw new Error(`Invalid JSON from ${candidate}: ${parseErr instanceof Error ? parseErr.message : parseErr}`);
-      }
+      const buffer = await readResponseBody(res);
+      return await bufferToJson(buffer, candidate);
     } catch (err) {
       lastError = err;
       console.error("⚠️ Source failed:", candidate, err);
