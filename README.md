@@ -31,20 +31,20 @@ npm run dev
 ```
 
 Two notes when you run it the first time:
-1. Make sure the dataset is actually present locally: run `git lfs pull` so `public/ui_demo.json` is downloaded (the build will fail if only the Git LFS pointer exists).
-2. The dashboard now defaults to the bundled `public/ui_demo.json`, so local dev and Vercel builds read from the same fast static file. If you want to point at a different snapshot, set `VITE_DATA_URL` before you start Vite (or before building).
-3. The worker streams the whole 389 MB JSON into IndexedDB. The banner spinner will show how many rows have landed; once it hits ~236k you’re cached and reloads are instant.
-4. Because of that streaming, expect the dev server to sit on a loading spinner for a bit on first boot—same story as production.
+1. Pull the source dataset once with `git lfs pull` (the 389 MB `public/ui_demo.json` lives in LFS so it doesn’t slow normal clones).
+2. Generate the chunked dataset + manifest to speed up streaming: `npm run split:data`. This writes `public/chunks/manifest.json` plus `chunk-*.json.gz` slices.
+3. The app automatically looks for `/chunks/manifest.json`, falling back to `/ui_demo.json` if the manifest is missing. Override it with `VITE_DATA_URL` when you want to point at a different manifest.
+4. The worker streams chunks into IndexedDB. First run still takes a moment, but each chunk is only a few MB so the UI becomes interactive much faster than the single 389 MB blob.
 
 Example with a custom data URL:
 ```bash
-VITE_DATA_URL=https://example.com/ui_demo.json npm run dev
+VITE_DATA_URL=https://example.com/chunks/manifest.json npm run dev
 ```
 
 ### Deploying to Vercel
-- Add an environment variable `VITE_DATA_URL` with the value `/ui_demo.json` so the deployed build streams from the static asset you ship with the app.
-- Enable Git LFS in the build environment by setting `VERCEL_GIT_LFS=1`; Vercel will run `git lfs pull` automatically during checkout.
-- Ship the large JSON via Git LFS (see below) or host it on your own CDN if you prefer to keep the repository lean.
+- Upload the generated `chunk-*.json.gz` files and `manifest.json` somewhere with permissive CORS (GitHub Releases, GitHub Pages, S3/R2, etc.).
+- Set `VITE_DATA_URL` to that manifest. Relative chunk paths in the manifest resolve against the manifest URL, so keeping the assets together under one tag or directory “just works”.
+- Production builds will fetch the manifest first and then stream the smaller chunk files; no more 389 MB download on first paint.
 
 ### Build for production 
 ```bash
@@ -52,8 +52,19 @@ npm run build
 ```
 Artifacts land in `dist/`.
 
+### Generate chunked dataset
+Run the helper to split the giant LFS snapshot into gzip slices + manifest:
+```bash
+npm run split:data
+```
+By default it reads `public/ui_demo.json`, writes chunks to `public/chunks/`, and targets ~5 MB per slice. Pass `--chunk-mb`, `--input`, or `--out` flags to customise:
+```bash
+node scripts/split-dataset.js --input ~/Downloads/ui_demo.json --out public/chunks --chunk-mb 3
+```
+Publish the resulting `manifest.json` and `chunk-*.json.gz` files to whatever host you use, then point `VITE_DATA_URL` at that manifest.
+
 ### Large dataset (Git LFS)
-The `public/ui_demo.json` archive weighs ~389 MB. The repository is configured to store it via [Git LFS](https://git-lfs.com/):
+The canonical snapshot still lives in `public/ui_demo.json` (~389 MB) and is tracked via [Git LFS](https://git-lfs.com/):
 ```bash
 git lfs install
 git lfs track "public/ui_demo.json"
@@ -72,13 +83,13 @@ We persist the full JSON into IndexedDB. To force a fresh import:
 ## Architecture Overview
 
 ```
-public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
-                                         ↓
-                              src/data/loader.ts
-                                         ↓
-                         Redux store (features/vulns)
-                                         ↓
-                   Components & pages render via selectors
+chunk manifest (manifest.json)  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
+             ↘ chunk-000.json.gz, chunk-001.json.gz, …     ↓
+                                               src/data/loader.ts
+                                                       ↓
+                                           Redux store (features/vulns)
+                                                       ↓
+                                   Components & pages render via selectors
 ```
 
 - **Entry point**: `src/main.tsx` wraps `App` with the Redux provider.
@@ -86,7 +97,7 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 - **State**: `src/features/vulns/slice.ts` stores the raw dataset plus derived filter state (query text, kai filters, severity set, date/CVSS ranges, etc.). `enableMapSet()` lets Immer handle our `Set` fields.
 - **Selectors & metrics**: `src/features/vulns/selectors.ts` and `src/utils/vulnMetrics.ts` compute KPIs, chart data, and table slices on demand.
 - **Data ingestion**:
-  - `jsonStreamer.worker.ts` streams the JSON so the main thread never freezes. We chunk 20 000 records at a time and enrich each vuln with `groupName`, `repoName`, `imageName`.
+  - `jsonStreamer.worker.ts` looks for a chunk manifest. When present it downloads each compressed slice, decompresses in the worker, enriches the rows, and streams them into IndexedDB without blocking the UI.
   - Each record gets a **composite ID**: `group|repo|image|sourceId|ordinal`. That preserves CVEs that appear in multiple repos instead of overwriting them.
   - `src/data/loader.ts` manages IndexedDB (`idb` wrapper). `streamIntoDB` launches the worker, `getAllVulnerabilities` reads everything back.
 - **UI**:

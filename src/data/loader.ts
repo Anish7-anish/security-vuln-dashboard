@@ -2,12 +2,13 @@ import { openDB, type IDBPDatabase } from 'idb';
 import { Vulnerability } from './types';
 import workerUrl from '../workers/jsonStreamer.worker?worker&url';
 
-const LOCAL_DATA_PATH = '/ui_demo.json';
+const LOCAL_MANIFEST = '/chunks/manifest.json';
+const LOCAL_FALLBACK = '/ui_demo.json';
 const envDataUrl = import.meta.env.VITE_DATA_URL;
 
 export const DATA_SOURCES = envDataUrl
   ? [envDataUrl]
-  : [LOCAL_DATA_PATH];
+  : [LOCAL_MANIFEST, LOCAL_FALLBACK];
 
 export const DATA_URL = DATA_SOURCES[0];
 export const EXPECTED_TOTAL = 236656;

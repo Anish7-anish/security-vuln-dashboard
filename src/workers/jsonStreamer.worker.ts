@@ -56,12 +56,33 @@ type WorkerRequest = {
   url?: string;
 };
 
+type Manifest = {
+  version?: number;
+  total?: number;
+  chunks?: Array<{
+    url: string;
+    count?: number;
+    bytes?: number;
+  }>;
+};
+
 const CHUNK_SIZE = 8000;
 const LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec";
 
 const sleepFrame = () => new Promise(requestAnimationFrame);
 
 const textDecoder = new TextDecoder();
+
+const isManifest = (value: any): value is Manifest =>
+  value && typeof value === "object" && Array.isArray(value.chunks);
+
+const makeAbsoluteUrl = (relative: string, base: string) => {
+  try {
+    return new URL(relative, base).toString();
+  } catch {
+    return relative;
+  }
+};
 
 async function readResponseBody(res: Response): Promise<ArrayBuffer> {
   if (!res.body) {
@@ -118,7 +139,9 @@ async function bufferToJson(buffer: ArrayBuffer, source: string): Promise<any> {
   }
 }
 
-async function loadJsonFromSources(sources: string[]): Promise<any> {
+async function loadJsonFromSources(
+  sources: string[],
+): Promise<{ data: any; source: string }> {
   let lastError: unknown = null;
 
   for (const candidate of sources) {
@@ -130,7 +153,8 @@ async function loadJsonFromSources(sources: string[]): Promise<any> {
       }
 
       const buffer = await readResponseBody(res);
-      return await bufferToJson(buffer, candidate);
+      const data = await bufferToJson(buffer, candidate);
+      return { data, source: candidate };
     } catch (err) {
       lastError = err;
       console.error("⚠️ Source failed:", candidate, err);
@@ -156,58 +180,12 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   console.log("👷 Worker started (yield-enabled). Sources:", sources);
 
   try {
-    const json = await loadJsonFromSources(sources);
-
-    let totalCount = 0;
-    let items: Vulnerability[] = [];
-
-    for (const [groupName, group] of Object.entries(json.groups || {})) {
-      for (const [repoName, repo] of Object.entries((group as any).repos || {})) {
-        for (const [imageName, image] of Object.entries((repo as any).images || {})) {
-          const vulns = (image as any).vulnerabilities || [];
-          for (const vuln of vulns) {
-            const ordinal = totalCount++;
-            const sourceId = (vuln as any).id ?? null;
-            const baseKey = sourceId || vuln.cve || `row-${ordinal}`;
-            const uniqueId = `${groupName}|${repoName}|${imageName}|${baseKey}|${ordinal}`;
-
-            // make a fresh record so we never mutate the original blob
-            const record: Vulnerability = {
-              ...vuln,
-              id: uniqueId,
-              groupName,
-              repoName,
-              imageName,
-              sourceId: sourceId ?? undefined,
-            };
-
-            if (ordinal < 5) {
-              console.log("🔎 Sample vuln:", {
-                id: record.id,
-                cve: record.cve,
-                kaiStatus: record.kaiStatus,
-                sourceId,
-              });
-            }
-            items.push(record);
-
-            // Send chunk
-            if (items.length >= CHUNK_SIZE) {
-              self.postMessage({ type: "chunk", items, progress: totalCount });
-              items = [];
-            }
-          }
-        }
-      }
-
-      // 💤 yield control every group iteration
-      await sleepFrame();
+    const { data, source } = await loadJsonFromSources(sources);
+    if (isManifest(data)) {
+      await streamFromManifest(data, source);
+    } else {
+      await streamWholeDataset(data);
     }
-
-    if (items.length > 0) self.postMessage({ type: "chunk", items, progress: totalCount });
-
-    console.log("🏁 Worker done. Total vulns:", totalCount);
-    self.postMessage({ type: "done", count: totalCount });
   } catch (err: any) {
     console.error("❌ Worker error:", err);
     self.postMessage({
@@ -216,3 +194,120 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     });
   }
 };
+
+async function streamFromManifest(manifest: Manifest, manifestUrl: string) {
+  if (!manifest.chunks?.length) {
+    throw new Error("Manifest did not include any chunks to download.");
+  }
+
+  console.log(`📜 Manifest detected with ${manifest.chunks.length} chunk(s).`);
+
+  let totalCount = 0;
+  let buffer: Vulnerability[] = [];
+
+  const flush = () => {
+    if (!buffer.length) return;
+    self.postMessage({ type: "chunk", items: buffer, progress: totalCount });
+    buffer = [];
+  };
+
+  for (const [index, entry] of manifest.chunks.entries()) {
+    const chunkUrl = makeAbsoluteUrl(entry.url, manifestUrl);
+    console.log(`   📥 Fetching chunk ${index + 1}/${manifest.chunks.length}: ${chunkUrl}`);
+
+    const res = await fetch(chunkUrl, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Failed to fetch chunk (${res.status}) from ${chunkUrl}`);
+
+    const chunkBuffer = await readResponseBody(res);
+    const chunkJson = await bufferToJson(chunkBuffer, chunkUrl);
+    const rows = Array.isArray(chunkJson?.rows) ? chunkJson.rows : [];
+
+    for (const vuln of rows) {
+      const record = buildRecord(vuln, totalCount);
+      logSample(record, totalCount);
+      buffer.push(record);
+      totalCount += 1;
+
+      if (buffer.length >= CHUNK_SIZE) {
+        flush();
+      }
+    }
+
+    flush();
+    await sleepFrame();
+  }
+
+  console.log("🏁 Manifest streaming complete.", totalCount);
+  self.postMessage({ type: "done", count: totalCount });
+}
+
+async function streamWholeDataset(json: any) {
+  let totalCount = 0;
+  let items: Vulnerability[] = [];
+
+  for (const [groupName, group] of Object.entries(json.groups || {})) {
+    for (const [repoName, repo] of Object.entries((group as any).repos || {})) {
+      for (const [imageName, image] of Object.entries((repo as any).images || {})) {
+        const vulns = (image as any).vulnerabilities || [];
+        for (const vuln of vulns) {
+          const record = buildRecord(vuln, totalCount, {
+            groupName,
+            repoName,
+            imageName,
+          });
+          totalCount += 1;
+          items.push(record);
+
+          logSample(record, totalCount - 1);
+
+          if (items.length >= CHUNK_SIZE) {
+            self.postMessage({ type: "chunk", items, progress: totalCount });
+            items = [];
+          }
+        }
+      }
+    }
+
+    await sleepFrame();
+  }
+
+  if (items.length > 0) {
+    self.postMessage({ type: "chunk", items, progress: totalCount });
+  }
+
+  console.log("🏁 Worker done. Total vulns:", totalCount);
+  self.postMessage({ type: "done", count: totalCount });
+}
+
+function buildRecord(
+  vuln: any,
+  ordinal: number,
+  context?: { groupName?: string; repoName?: string; imageName?: string },
+): Vulnerability {
+  const groupName = (vuln?.groupName ?? context?.groupName) || "";
+  const repoName = (vuln?.repoName ?? context?.repoName) || "";
+  const imageName = (vuln?.imageName ?? context?.imageName) || "";
+
+  const sourceId = (vuln as any)?.id ?? null;
+  const baseKey = (vuln as any)?.sourceId || (vuln as any)?.cve || sourceId || `row-${ordinal}`;
+  const uniqueId = `${groupName}|${repoName}|${imageName}|${baseKey}|${ordinal}`;
+
+  return {
+    ...vuln,
+    id: uniqueId,
+    groupName,
+    repoName,
+    imageName,
+    sourceId: sourceId ?? undefined,
+  };
+}
+
+function logSample(record: Vulnerability, ordinal: number) {
+  if (ordinal >= 5) return;
+  console.log("🔎 Sample vuln:", {
+    id: record.id,
+    cve: record.cve,
+    kaiStatus: record.kaiStatus,
+    sourceId: record.sourceId,
+  });
+}
