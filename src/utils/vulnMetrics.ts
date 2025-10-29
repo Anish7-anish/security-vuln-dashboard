@@ -50,6 +50,7 @@ const severityScore: Record<string, number> = {
 };
 
 function normaliseSeverity(value?: string): 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN' {
+  // Normalise the noisy severity strings into the buckets our charts expect.
   const upper = (value || 'UNKNOWN').toUpperCase();
   if (upper.includes('CRIT')) return 'CRITICAL';
   if (upper.includes('HIGH')) return 'HIGH';
@@ -59,12 +60,14 @@ function normaliseSeverity(value?: string): 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LO
 }
 
 function riskFactorLabels(v: Vulnerability): string[] {
+  // Flatten risk factor payloads into a simple string array.
   if (!v.riskFactors) return [];
   if (Array.isArray(v.riskFactors)) return v.riskFactors.filter(Boolean) as string[];
   return Object.keys(v.riskFactors as Record<string, unknown>);
 }
 
 function parseDate(candidate?: string): Date | null {
+  // Ignore dates we can't parse cleanly.
   if (!candidate) return null;
   const ts = Date.parse(candidate);
   if (Number.isNaN(ts)) return null;
@@ -72,6 +75,7 @@ function parseDate(candidate?: string): Date | null {
 }
 
 export function collectRiskFactorCounts(rows: Vulnerability[]): RiskFactorDatum[] {
+  // Count occurrences per risk factor for charting.
   const counts = new Map<string, number>();
   rows.forEach((row) => {
     riskFactorLabels(row).forEach((label) => {
@@ -85,6 +89,7 @@ export function collectRiskFactorCounts(rows: Vulnerability[]): RiskFactorDatum[
 }
 
 export function buildMonthlyTrend(rows: Vulnerability[]): TrendPoint[] {
+  // Bucket vulnerabilities by month and severity for the trend line.
   const buckets = new Map<string, TrendPoint>();
   rows.forEach((row) => {
     const date =
@@ -119,6 +124,7 @@ export function deriveFilterImpact(
   kaiExclude: string[],
   query: string,
 ): FilterImpactMetrics {
+  // Compare total vs visible counts to show how much the filters hide.
   const total = all.length;
   const visibleCount = visible.length;
   const hidden = Math.max(total - visibleCount, 0);
@@ -144,6 +150,7 @@ export function deriveFilterImpact(
 }
 
 export function computeAiManualBreakdown(rows: Vulnerability[]): AiManualDatum[] {
+  // Split counts by severity and whether Kai or a human touched them.
   const buckets = new Map<string, AiManualDatum>();
   rows.forEach((row) => {
     const severity = normaliseSeverity(row.severity);
@@ -166,6 +173,7 @@ export function computeAiManualBreakdown(rows: Vulnerability[]): AiManualDatum[]
 }
 
 export function pickCriticalHighlights(rows: Vulnerability[], limit = 3): Vulnerability[] {
+  // Prioritise the nastiest vulns, then backfill with the next tier if needed.
   const critical = rows
     .filter((row) => normaliseSeverity(row.severity) === 'CRITICAL')
     .sort((a, b) => {

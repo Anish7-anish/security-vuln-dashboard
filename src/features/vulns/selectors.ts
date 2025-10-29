@@ -1,54 +1,62 @@
-import { createSelector } from 'reselect';
-import { RootState } from '../../app/store';
-import {
-  collectRiskFactorCounts,
-  buildMonthlyTrend,
-  deriveFilterImpact,
-  computeAiManualBreakdown,
-  pickCriticalHighlights,
-} from '../../utils/vulnMetrics';
+import { createSelector } from '@reduxjs/toolkit';
+import type { RootState } from '../../app/store';
 
 const selectSlice = (state: RootState) => state.vulns;
 
-export const selectAll = createSelector([selectSlice], (s) => s.data);
+export const selectItems = createSelector([selectSlice], (s) => s.items);
 
-export const selectFiltered = createSelector([selectSlice], (s) => s.filtered);
+export const selectFiltered = selectItems;
+
+export const selectTotal = createSelector([selectSlice], (s) => s.total);
+
+export const selectPagination = createSelector([selectSlice], (s) => ({
+  page: s.page,
+  pageSize: s.pageSize,
+  total: s.total,
+}));
 
 export const selectSort = createSelector([selectSlice], (s) => ({
   sortBy: s.sortBy,
   sortDirection: s.sortDirection,
 }));
 
-export const selectKPI = createSelector([selectSlice], (s) => {
-  const total = s.data.length;
-  const remain = s.filtered.length;
-  const removed = total - remain;
-  const pctRemain = total ? remain / total : 0;
-  return { total, remain, removed, pctRemain };
-});
+export const selectStatus = createSelector([selectSlice], (s) => s.status);
+export const selectIsRefreshing = createSelector([selectSlice], (s) => s.isRefreshing);
 
-const selectKaiExcludeArray = createSelector([selectSlice], (s) =>
-  Array.from(s.kaiExclude),
+export const selectError = createSelector([selectSlice], (s) => s.error);
+
+export const selectFilters = createSelector([selectSlice], (s) => s.filters);
+export const selectOptions = createSelector([selectSlice], (s) => s.options);
+export const selectHasMore = createSelector([selectSlice], (s) => s.hasMore);
+
+export const selectKPI = createSelector([selectSlice], (s) => s.metrics.kpis);
+
+export const selectSeverityCounts = createSelector(
+  [selectSlice],
+  (s) => s.metrics.severityCounts,
 );
 
-export const selectRiskFactorData = createSelector([selectFiltered], (rows) =>
-  collectRiskFactorCounts(rows),
+export const selectRiskFactorData = createSelector(
+  [selectSlice],
+  (s) => s.metrics.riskFactors,
 );
 
-export const selectTrendData = createSelector([selectFiltered], (rows) =>
-  buildMonthlyTrend(rows),
+export const selectTrendData = createSelector(
+  [selectSlice],
+  (s) => s.metrics.trend,
 );
 
-export const selectFilterImpact = createSelector(
-  [selectAll, selectFiltered, selectKaiExcludeArray, selectSlice],
-  (all, filtered, kaiExclude, slice) =>
-    deriveFilterImpact(all, filtered, kaiExclude, slice.q),
+export const selectAiManualData = createSelector(
+  [selectSlice],
+  (s) => s.metrics.aiManual,
 );
 
-export const selectAiManualData = createSelector([selectFiltered], (rows) =>
-  computeAiManualBreakdown(rows),
+export const selectCriticalHighlights = createSelector(
+  [selectSlice],
+  (s) => s.metrics.highlights,
 );
 
-export const selectCriticalHighlights = createSelector([selectFiltered], (rows) =>
-  pickCriticalHighlights(rows),
+export const selectRepoSummary = createSelector(
+  [selectSlice],
+  (s) => s.metrics.repoSummary,
 );

@@ -9,13 +9,15 @@ export interface Vulnerability {
 
   // Identifiers
   cve?: string;                 // ← added explicitly (used in detail & NVD links)
-  package: string;
+  package?: string;
   version?: string;
 
   // Severity metrics
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN' | string;
-  cvss?: number | string;       // ← renamed for consistency with your JSON (you used cvss in table)
-  cvssScore?: number;           // optional alias (in case your JSON uses "cvssScore")
+  severityNormalized?: string;
+  severityScore?: number;
+  cvss?: number | string;
+  cvssScore?: number;
 
   // Dates
   publishedAt?: string;
@@ -25,7 +27,9 @@ export interface Vulnerability {
 
   // Risk metadata
   riskFactors?: string[] | Record<string, unknown>;
+  riskFactorList?: string[];
   kaiStatus?: KaiStatus;
+  status?: string;
   summary?: string;
   references?: string[];
   link?: string;

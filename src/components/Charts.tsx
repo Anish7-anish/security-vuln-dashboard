@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   PieChart,
   Pie,
@@ -34,19 +34,8 @@ const severityPalette: Record<string, string> = {
   UNKNOWN: '#5b8ff9',
 };
 
-export const SeverityChart = ({ data }: { data: Vulnerability[] }) => {
-  const summary = useMemo(() => {
-    if (!data.length) return [];
-    const entries = Object.entries(
-      data.reduce((acc: Record<string, number>, v) => {
-        const key = (v.severity || 'UNKNOWN').toUpperCase();
-        acc[key] = (acc[key] || 0) + 1;
-        return acc;
-      }, {}),
-    );
-    return entries.map(([name, value]) => ({ name, value }));
-  }, [data]);
-
+export const SeverityChart = ({ data }: { data: Array<{ name: string; value: number }> }) => {
+  const summary = data ?? [];
   return (
     <Card title="Severity Distribution" style={{ width: '100%', height: '100%' }} bodyStyle={{ height: '100%' }}>
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

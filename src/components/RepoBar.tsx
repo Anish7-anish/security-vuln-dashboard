@@ -2,18 +2,11 @@
 import React from 'react';
 import { Card } from 'antd';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Vulnerability } from '../data/types';
 
-export default function RepoBar({ data }: { data: Vulnerability[] }) {
-  const byRepo = Object.entries(
-    data.reduce((acc: Record<string, number>, v) => {
-      const k = v.repoName || 'unknown';
-      acc[k] = (acc[k] || 0) + 1;
-      return acc;
-    }, {})
-  ).map(([name, value]) => ({ name, value }))
-   .sort((a, b) => b.value - a.value)
-   .slice(0, 15);
+type RepoDatum = { name: string; value: number };
+
+export default function RepoBar({ data }: { data: RepoDatum[] }) {
+  const chartData = data.slice(0, 15);
 
   return (
     <Card
@@ -22,7 +15,7 @@ export default function RepoBar({ data }: { data: Vulnerability[] }) {
       style={{ width: '100%' }}
     >
       <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={byRepo}>
+        <BarChart data={chartData}>
           <XAxis dataKey="name" hide />
           <YAxis />
           <Tooltip />

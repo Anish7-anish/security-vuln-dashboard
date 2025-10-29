@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Layout, Typography, Input, Button, Space, message, AutoComplete, Card } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import type { RootState } from '../app/store';
+import { fetchSuggestions, type Suggestion } from '../data/api';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -16,56 +15,35 @@ type Suggestion = {
 export default function VulnQuickLookup() {
   const [value, setValue] = useState('');
   const [options, setOptions] = useState<Suggestion[]>([]);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const all = useSelector((s: RootState) => s.vulns.data);
-
-  const suggestions = useMemo(() => {
-    // build a quick list of suggestions so the dropdown feels instant
-    const entries: Suggestion[] = [];
-    const seen = new Set<string>();
-    for (const vuln of all) {
-      const cve = vuln.cve ? String(vuln.cve) : null;
-      const id = vuln.id ? String(vuln.id) : null;
-
-      if (cve && !seen.has(cve)) {
-        seen.add(cve);
-        entries.push({
-          value: cve,
-          primary: cve,
-          label: <span>{cve}</span>,
-        });
-      }
-
-      if (!cve && id && !seen.has(id)) {
-        seen.add(id);
-        entries.push({
-          value: id,
-          primary: id,
-          label: <span>{id}</span>,
-        });
-      }
-
-      if (entries.length > 6000) break;
-    }
-    return entries;
-  }, [all]);
 
   const handleSearch = (input: string) => {
     setValue(input);
-    const term = input.trim().toLowerCase();
+  };
+
+  // Quick debounce before hitting the suggestion endpoint so we don't spam requests while typing.
+  useEffect(() => {
+    const term = value.trim();
     if (!term) {
       setOptions([]);
       return;
     }
-    const matches: Suggestion[] = [];
-    for (const candidate of suggestions) {
-      if (candidate.value.toLowerCase().includes(term) || candidate.primary.toLowerCase().includes(term)) {
-        matches.push(candidate);
-        if (matches.length === 12) break;
+
+    const handle = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const results = await fetchSuggestions(term, 15);
+        setOptions(results);
+      } catch (err) {
+        console.error('Failed to fetch suggestions', err);
+      } finally {
+        setLoading(false);
       }
-    }
-    setOptions(matches);
-  };
+    }, 250);
+
+    return () => clearTimeout(handle);
+  }, [value]);
 
   const handleSubmit = () => {
     const trimmed = value.trim();
@@ -113,6 +91,7 @@ export default function VulnQuickLookup() {
                 setValue(next);
                 navigate(`/vuln/${encodeURIComponent(next)}`);
               }}
+              notFoundContent={loading ? 'Searching…' : null}
             >
               <Input
                 size="large"

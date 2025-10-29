@@ -4,14 +4,14 @@ import { Button, Card, Typography, Tag, Descriptions, Spin } from 'antd';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../app/store';
 import type { Vulnerability } from '../data/types';
-import { getAllVulnerabilities } from '../data/loader';
+import { fetchVulnerabilityById } from '../data/api';
 
 const { Title, Paragraph } = Typography;
 
 const VulnDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const all = useSelector((s: RootState) => s.vulns.data);
+  const items = useSelector((s: RootState) => s.vulns.items);
 
   const [vuln, setVuln] = useState<Vulnerability | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,20 +22,17 @@ const VulnDetail: React.FC = () => {
       const target = decodeURIComponent(id ?? '').trim();
       const targetLower = target.toLowerCase();
       let found =
-        all.find((v) => (v.id || '').toLowerCase() === targetLower) ||
-        all.find((v) => (v.cve || '').toLowerCase() === targetLower);
+        items.find((v) => (v.id || '').toLowerCase() === targetLower) ||
+        items.find((v) => (v.cve || '').toLowerCase() === targetLower);
+
       if (!found) {
-        // fallback: read directly from IndexedDB
-        const stored = await getAllVulnerabilities();
-        found =
-          stored.find((v) => (v.id || '').toLowerCase() === targetLower) ||
-          stored.find((v) => (v.cve || '').toLowerCase() === targetLower);
+        found = await fetchVulnerabilityById(target);
       }
       setVuln(found ?? null);
       setLoading(false);
     };
     load();
-  }, [id, all]);
+  }, [id, items]);
 
   if (loading) return <Spin size="large" style={{ marginTop: 100, display: 'block' }} />;
 
@@ -85,11 +82,11 @@ const VulnDetail: React.FC = () => {
           </Tag>
         )}
 
-        <Descriptions bordered column={1} size="middle" style={{ marginTop: '1rem' }}>
-          <Descriptions.Item label="CVE ID">{vuln.cve || 'N/A'}</Descriptions.Item>
-          <Descriptions.Item label="Severity">
-            <Tag color={sevColor}>{sev || 'N/A'}</Tag>
-          </Descriptions.Item>
+      <Descriptions bordered column={1} size="middle" style={{ marginTop: '1rem' }}>
+        <Descriptions.Item label="CVE ID">{vuln.cve || 'N/A'}</Descriptions.Item>
+        <Descriptions.Item label="Severity">
+          <Tag color={sevColor}>{sev || 'N/A'}</Tag>
+        </Descriptions.Item>
           <Descriptions.Item label="CVSS Score">{vuln.cvss || '—'}</Descriptions.Item>
           <Descriptions.Item label="Package">{vuln.package || 'N/A'}</Descriptions.Item>
           <Descriptions.Item label="Repository">{vuln.repoName || 'N/A'}</Descriptions.Item>
@@ -108,16 +105,10 @@ const VulnDetail: React.FC = () => {
                 ))
               : 'None'}
           </Descriptions.Item>
-          <Descriptions.Item label="Summary">
-            {vuln.summary || '—'}
-          </Descriptions.Item>
-        </Descriptions>
-
-        <Paragraph style={{ marginTop: '1rem', color: '#555' }}>
-          {vuln.summary
-            ? vuln.summary
-            : 'Detailed information about this vulnerability will appear here, including potential impact, CVSS vector, and mitigation notes.'}
-        </Paragraph>
+        <Descriptions.Item label="Summary">
+          {vuln.summary || '—'}
+        </Descriptions.Item>
+      </Descriptions>
 
         {nvdLink && (
           <Button

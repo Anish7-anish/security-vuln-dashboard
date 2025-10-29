@@ -26,7 +26,6 @@ const normaliseRiskFactors = (riskFactors: Vulnerability['riskFactors']): string
   return Object.keys(riskFactors as Record<string, unknown>);
 };
 
-// crunch the filtered rows into a csv blob the browser can download
 export function exportAsCsv(rows: Vulnerability[]): Blob {
   const header = CSV_FIELDS.map((field) => field.header).join(',');
   const data = rows.map((row) => {
@@ -47,13 +46,11 @@ export function exportAsCsv(rows: Vulnerability[]): Blob {
   return new Blob([csv], { type: 'text/csv;charset=utf-8' });
 }
 
-// sometimes I just want the raw objects back out
 export function exportAsJson(rows: Vulnerability[]): Blob {
   const json = JSON.stringify(rows, null, 2);
   return new Blob([json], { type: 'application/json;charset=utf-8' });
 }
 
-// standard download shim: point a hidden anchor at the blob and click it
 export function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');

@@ -1,50 +1,61 @@
 # Security Vulnerability Dashboard
 
-React + Vite dashboard for exploring a very large vulnerability dataset. We fetch a JSON snapshot, stream it through a web worker into IndexedDB, and drive the UI from Redux so filters stay in sync across screens.
+React + Vite dashboard for exploring a very large vulnerability dataset. A
+lightweight Express + MongoDB API streams paginated slices and pre-computed
+metrics so the browser stays fast even though the source snapshot is 389 MB.
 
+### Recent Updates
+- Filter bar debounces auto-complete queries, keeps CVSS sliders bounded, and surfaces active filters as dismissible chips.
+- Vulnerability table now renders through a virtual list so thousands of rows stay smooth while infinite scrolling.
+- Dashboard preferences persist in `localStorage`, and charts/metrics lean on normalised data helpers for consistent totals.
+- Inline documentation was added around the heavier logic (filter plumbing, virtual scroll, metrics math) to make future changes safer.
 
 ### Deployment
-- Vercel: https://security-vuln-dashboard.vercel.app (first visit may take some time while the JSON streams into IndexedDB)
+- Vercel: https://security-vuln-dashboard.vercel.app
 
 ![Demo](assets/security-vul-dashboard-ezgif.com-video-to-gif-converter.gif)
 
 ## Getting Started
 
-### Clone the Repository
+### Prerequisites
+- Node.js 18+
+- npm (bundled with Node). 
+
+### 1. Clone the repository
 ```bash
 git clone https://github.com/anish/security-vuln-dashboard.git
 cd security-vuln-dashboard
 ```
 
-### Prerequisites
-- Node.js 18+
-- npm (bundled with Node). 
-
-### Install
+### 2. Install dependencies
 ```bash
 npm install
 ```
 
-### Run locally
+### 3. Start the API (requires MongoDB running locally or in Atlas)
 ```bash
-npm run dev
+cd api
+npm install
+cp .env.example .env   # update MONGODB_URI if necessary
+npm run import         # one-time import from ../public/ui_demo.json
+npm run dev            # starts http://localhost:4000
 ```
 
-Two notes when you run it the first time:
-1. Make sure the dataset is actually present locally: run `git lfs pull` so `public/ui_demo.json` is downloaded (the build will fail if only the Git LFS pointer exists).
-2. The dashboard now defaults to the bundled `public/ui_demo.json`, so local dev and Vercel builds read from the same fast static file. If you want to point at a different snapshot, set `VITE_DATA_URL` before you start Vite (or before building).
-3. The worker streams the whole 389 MB JSON into IndexedDB. The banner spinner will show how many rows have landed; once it hits ~236k you’re cached and reloads are instant.
-4. Because of that streaming, expect the dev server to sit on a loading spinner for a bit on first boot—same story as production.
-
-Example with a custom data URL:
+### 4. Start the frontend (new terminal)
 ```bash
-VITE_DATA_URL=https://example.com/ui_demo.json npm run dev
+cd ..
+VITE_API_URL=http://localhost:4000/api npm run dev
 ```
+
+The browser now pulls paginated data from the API, so the first paint is almost
+instant—the heavy lifting happens on the server.
 
 ### Deploying to Vercel
-- Add an environment variable `VITE_DATA_URL` with the value `/ui_demo.json` so the deployed build streams from the static asset you ship with the app.
-- Enable Git LFS in the build environment by setting `VERCEL_GIT_LFS=1`; Vercel will run `git lfs pull` automatically during checkout.
-- Ship the large JSON via Git LFS (see below) or host it on your own CDN if you prefer to keep the repository lean.
+- Deploy the API (Render, Railway, Fly.io, a small VM, or Vercel functions) and
+  set `MONGODB_URI`, `PORT`, and `CORS_ORIGIN` appropriately.
+- Point the frontend at that API by setting `VITE_API_URL=https://your-api.example.com/api`
+  in both Preview and Production environments.
+- Redeploy the frontend—no static JSON bundling required any more.
 
 ### Build for production 
 ```bash
@@ -61,61 +72,58 @@ git add .gitattributes public/ui_demo.json
 ```
 If the file already exists in history, run `git lfs migrate import --include="public/ui_demo.json"` once to rewrite past commits before pushing.
 
-### Resetting the local dataset
-We persist the full JSON into IndexedDB. To force a fresh import:
-1. Open DevTools → **Application** → **IndexedDB**.
-2. Right-click `vuln-db` → **Delete database**.
-3. Reload the app; the worker will stream `public/ui_demo.json` again.
+### Resetting the dataset
+Re-run `npm run api:import` whenever you update `public/ui_demo.json`. The
+script wipes and reloads MongoDB, and the API immediately serves the new data.
 
 
 
 ## Architecture Overview
 
 ```
-public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
-                                         ↓
-                              src/data/loader.ts
-                                         ↓
-                         Redux store (features/vulns)
-                                         ↓
-                   Components & pages render via selectors
+Browser (React) ─┬─► REST API (Express)
+                 │        │
+                 │        └─► MongoDB
+                 ▼
+        Redux Toolkit store
+                 ▼
+        Components render via selectors
 ```
 
 - **Entry point**: `src/main.tsx` wraps `App` with the Redux provider.
-- **Routing**: `App.tsx` uses React Router (`/` dashboard, `/search`, `/vuln/:id`) and Ant Design’s layout.
-- **State**: `src/features/vulns/slice.ts` stores the raw dataset plus derived filter state (query text, kai filters, severity set, date/CVSS ranges, etc.). `enableMapSet()` lets Immer handle our `Set` fields.
-- **Selectors & metrics**: `src/features/vulns/selectors.ts` and `src/utils/vulnMetrics.ts` compute KPIs, chart data, and table slices on demand.
-- **Data ingestion**:
-  - `jsonStreamer.worker.ts` streams the JSON so the main thread never freezes. We chunk 20 000 records at a time and enrich each vuln with `groupName`, `repoName`, `imageName`.
-  - Each record gets a **composite ID**: `group|repo|image|sourceId|ordinal`. That preserves CVEs that appear in multiple repos instead of overwriting them.
-  - `src/data/loader.ts` manages IndexedDB (`idb` wrapper). `streamIntoDB` launches the worker, `getAllVulnerabilities` reads everything back.
+- **Routing**: `App.tsx` uses React Router (`/`, `/search`, `/vuln/:id`).
+- **Redux slice**: `src/features/vulns/slice.ts` stores the current page, filters,
+  sort order, and server-provided metrics.
+- **Selectors**: `src/features/vulns/selectors.ts` expose handy views of that
+  state for charts, KPIs, and tables.
+- **Data ingestion**: The Express API handles pagination/filtering and returns
+  aggregated metrics so the browser only fetches what it needs for each view.
 - **UI**:
   - `Dashboard.tsx` bootstraps the data (stream if DB empty, otherwise hydrate). It also persists “show/hide” preferences in `localStorage`.
   - Reusable components live under `src/components/` (filters, charts, KPIs, tables, comparisons).
   - `SearchPage` reuses the filter + table stack on a white canvas for focused querying.
-  - `VulnDetail` shows an individual record, falling back to IndexedDB if the Redux cache hasn’t loaded yet.
+- `VulnDetail` fetches an individual record on demand if it is not already in
+  the Redux cache.
 
-
+### Why MongoDB instead of IndexedDB?
+- **Size limits**: The 389 MB snapshot plus aggregation indexes pushed past what browsers comfortably store in IndexedDB.
+- **Cold start time**: Importing JSON into IndexedDB required a multi-minute first load; MongoDB ships pre-indexed data to the API so the UI paints immediately.
+- **Shared access**: MongoDB lets multiple analysts hit the same dataset without each browser carrying a private copy.
+- **Server-side aggregations**: We lean on MongoDB pipelines to calculate risk-factor counts, trend lines, and highlights before data reaches the browser.
 
 ## Component Architecture & Data Flow
 
 ### FilterBar
-- Central control surface: search, kai status toggles, multi-select filters, date range, CVSS slider, sort controls.
-- Dispatches Redux actions on every change (`setQuery`, `toggleKaiFilter`, `setKaiStatuses`, `setRiskFactors`, etc.). The slice recomputes `filtered` immediately.
-- Renders “active filter” chips; closing a chip dispatches the inverse action.
-- Why dual kai controls? We keep the legacy “Analysis / AI Analysis” buttons as **exclusions**, and added the multi-select for “only show these kai statuses”. Both feed through the same slice so interactions stay predictable.
+- Lightweight search and severity filters. Each change dispatches a Redux action
+  and triggers `fetchVulnerabilities()` so results stay in sync with the server.
 
 ### KPIs & Progress
 - `KPIs.tsx` pulls aggregate counts via `selectKPI`. The short progress bar gives quick “filters removed X%” feedback.
 
 ### Charts
-- `Charts.tsx` exports the visualisations:
-  - `SeverityChart` donut
-  - `RiskFactorChart`
-  - `TrendChart`
-  - `AiManualChart`
-  - `CriticalHighlights`
-- All charts rely on selectors → metrics utilities, so they update whenever `filtered` changes. Layout uses Ant Design cards to keep consistent sizing.
+- `Charts.tsx` exports the visualisations (severity distribution, risk factors,
+  monthly trend, AI vs manual analysis, highlights). Each chart reads aggregated
+  metrics returned by the API.
 
 ### RepoBar & Comparison
 - `RepoBar.tsx` aggregates vulns per repo, sliced to the top 15, and colours bars green to align with our palette.
@@ -123,7 +131,7 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 
 ### Tables & Detail View
 - `VulnTable.tsx` renders the filtered list with pagination and severity colouring. Clicking a row links to `/vuln/:id`.
-- `VulnDetail.tsx` loads the record from Redux or IndexedDB, shows badges, risk factors, and links out to NVD when we have a CVE.
+- `VulnDetail.tsx` fetches a record from the API on demand, shows badges, risk factors, and links out to NVD when we have a CVE.
 
 ### Preference Toggles
 - Stored under `svd-dashboard-preferences` in `localStorage`, so the dashboard remembers which tiles you’ve hidden. Each toggle simply flips a boolean in local component state; the state persists on layout changes.
@@ -132,22 +140,27 @@ public/ui_demo.json  →  jsonStreamer.worker.ts  →  IndexedDB (vuln-db)
 
 ## Decisions & Trade-offs
 
-- **Stream + cache the dataset**: The JSON dump is huge, so we offload parsing to a web worker and keep the result in IndexedDB. This avoids blowing up memory on reload and keeps the UI responsive. Trade-off: initial load still takes time, but it’s a one-off hit.
-- **Composite vulnerability IDs**: The source reuses IDs per CVE. We generate `group|repo|image|sourceId|ordinal` before storing so a CVE appearing in 20 repos yields 20 rows. This fixed the “stuck at 140k” total and preserved per-repo metrics.
-- **Redux Toolkit for shared state**: Filters and totals need to stay in sync across Dashboard, Search, and the detail view, so a global store felt simplest. Immer’s `enableMapSet()` lets us rely on native `Set`s for filters (clean ergonomics) without rolling our own serializer.
-- **Ant Design + Recharts**: Chosen for velocity. AntD provides polished cards/tables while Recharts handles most chart types with minimal ceremony. The cost is bundle size, but Vite’s dev experience stays snappy.
-- **Kai status UX**: We kept the original “Analysis” exclude buttons for muscle memory, but added an inclusive multi-select so analysts can focus on specific statuses. Both interact nicely because the slice differentiates between `kaiExclude` and `kaiStatuses`.
-- **Local preference persistence**: Rather than a backend profile, we stash layout toggles in `localStorage`. Easy to implement, and users tend to run this locally, so syncing isn’t critical.
-- **Header restyle**: Dark blue background made the default header disappear. We switched to a gradient + subtle shadow so navigation stays readable against the deep dashboard canvas.
-- **Virtual scroll > always-on pagination**: Paging through hundreds of CVEs was painful, so big result sets stay in a single, virtualized scroll while smaller ones keep the familiar paginated view. Feels more fluid and the DOM stays lean.
-- **Lazy chunks for charts/routes**: Pulled the chart bundle, repo comparison, and secondary pages behind `React.lazy` so the dashboard boots faster and streams in the heavy stuff only when we actually visit it, with Suspense spinners covering the gap.
+- **Server-first ingestion**: The 389 MB JSON is processed once on the server.
+  The browser receives paginated slices, so first paint is fast even on slow
+  networks.
+- **Composite vulnerability IDs**: Import keeps the
+  `group|repo|image|sourceId|ordinal` identifier so duplicate CVEs across repos
+  remain unique.
+- **Redux Toolkit for shared state**: Filters, pagination, and metrics stay in
+  sync across Dashboard, Search, and detail views with a single slice.
+- **Ant Design + Recharts**: Still the quickest way to ship tables and charts
+  with a consistent look.
+- **Local preference persistence**: Layout toggles remain in `localStorage` so
+  analysts can customise the dashboard.
 
 
 
 ## Development Notes
 
-- Dataset lives in `public/ui_demo.json`. Refresh the browser database whenever you change it.
-- Workers are cached by the browser. If you touch `jsonStreamer.worker.ts`, clear IndexedDB or hard-reload (`Cmd+Shift+R`) so the new code runs.
+- Dataset lives in `public/ui_demo.json`; re-run `npm run api:import` after making
+  changes.
+- Configure `MONGODB_URI` for the API and `VITE_API_URL` for the frontend when
+  deploying.
 - Tests aren’t wired yet. When we stabilise the dataset, we can add store-level tests to verify filtering math.
 
 Happy dashboarding!

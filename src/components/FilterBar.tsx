@@ -1,218 +1,330 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AutoComplete,
-  Input,
   Button,
-  Space,
-  Typography,
-  Tag,
-  Divider,
-  Tooltip,
-  Select,
   DatePicker,
-  Slider,
+  Input,
   InputNumber,
-  Segmented,
+  Select,
+  Slider,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
 } from 'antd';
-import type { RangeValue } from 'rc-picker/lib/interface';
-import dayjs, { Dayjs } from 'dayjs';
+import type { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../app/store';
 import {
-  setQuery,
-  toggleKaiFilter,
-  clearAllFilters,
-  toggleSeverity,
-  setRiskFactors,
-  setKaiStatuses,
-  setDateRange,
+  selectFilters,
+  selectItems,
+  selectOptions,
+  selectSort,
+  selectStatus,
+  selectIsRefreshing,
+} from '../features/vulns/selectors';
+import {
+  fetchVulnerabilities,
+  resetFilters,
   setCvssRange,
-  setSortBy,
-  setSortDirection,
+  setDateRange,
+  setKaiStatuses,
+  setQuery,
+  setRepoFilter,
+  setRiskFactors,
+  setGroupFilter,
+  setSort,
+  toggleKaiFilter,
+  toggleSeverity,
 } from '../features/vulns/slice';
-import {
-  FilterOutlined,
-  ThunderboltOutlined,
-  ClearOutlined,
-  DownloadOutlined,
-} from '@ant-design/icons';
-import './FilterBar.css';
+import { fetchSuggestions, type Suggestion } from '../data/api';
+import type { AppDispatch } from '../app/store';
 import { exportAsCsv, exportAsJson, saveBlob } from '../utils/exportData';
 
-const { Search } = Input;
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
 
-type DateRange = [number, number];
-type CvssRange = [number, number];
+const ANALYSIS_STATUS = 'invalid - norisk';
+const AI_ANALYSIS_STATUS = 'ai-invalid-norisk';
 
-const DEFAULT_CVSS_RANGE: CvssRange = [0, 10];
-const SEARCH_WIDTH = 420;
+const severityConfigs: Array<{ value: string; label: string; color: string }> = [
+  { value: 'CRITICAL', label: 'CRITICAL', color: '#cf1322' },
+  { value: 'HIGH', label: 'HIGH', color: '#fa8c16' },
+  { value: 'MEDIUM', label: 'MEDIUM', color: '#faad14' },
+  { value: 'LOW', label: 'LOW', color: '#52c41a' },
+];
+
 const SORT_OPTIONS = [
   { label: 'Severity', value: 'severity' },
   { label: 'CVSS', value: 'cvss' },
   { label: 'Published', value: 'published' },
-  { label: 'Repository', value: 'repo' },
-  { label: 'Package', value: 'package' },
-] as const;
-type SortOptionValue = (typeof SORT_OPTIONS)[number]['value'];
+  { label: 'Repository', value: 'repoName' },
+];
 
-const clampCvss = (value: number): number => {
-  const clamped = Math.min(10, Math.max(0, value));
-  return Math.round(clamped * 10) / 10;
+const sliderMarks = {
+  0: '0',
+  2: '2',
+  4: '4',
+  6: '6',
+  8: '8',
+  10: '10',
 };
-
-const normaliseCvssRange = (range: CvssRange): CvssRange => {
-  let [min, max] = range;
-  min = clampCvss(min);
-  max = clampCvss(max);
-  if (min > max) {
-    return [max, min];
-  }
-  return [min, max];
-};
-
-const isDefaultCvssRange = (range: CvssRange) =>
-  range[0] === DEFAULT_CVSS_RANGE[0] && range[1] === DEFAULT_CVSS_RANGE[1];
 
 export default function FilterBar() {
-  const dispatch = useDispatch();
-  const {
-    q,
-    kaiExclude,
-    kaiStatuses,
-    severities,
-    filtered,
-    data,
-    riskFactors,
-    dateRange,
-  cvssRange,
-    sortBy,
-    sortDirection,
-  } = useSelector((s: RootState) => s.vulns);
+  const dispatch = useDispatch<AppDispatch>();
+  const filters = useSelector(selectFilters);
+  const options = useSelector(selectOptions);
+  const sort = useSelector(selectSort);
+  const status = useSelector(selectStatus);
+  const rows = useSelector(selectItems);
+  const isRefreshing = useSelector(selectIsRefreshing);
 
-  const [searchValue, setSearchValue] = React.useState(q ?? '');
-  const [options, setOptions] = React.useState<{ value: string }[]>([]);
-  const [exporting, setExporting] = React.useState<'csv' | 'json' | null>(null);
+  const [searchValue, setSearchValue] = useState(filters.query ?? '');
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
+  const [repoOptions, setRepoOptions] = useState(options.repos);
+  const [groupOptions, setGroupOptions] = useState(options.groups);
 
-  React.useEffect(() => {
-    // keep input box in sync whenever query is changed elsewhere
-    setSearchValue(q ?? '');
-  }, [q]);
+  const isLoading = status === 'loading' && !isRefreshing;
 
-  const handleSearchChange = (value: string) => {
-    setSearchValue(value);
+  const cvssBounds = options.cvssRange ?? { min: 0, max: 10 };
+  const effectiveCvss = filters.cvssRange ?? [cvssBounds.min, cvssBounds.max];
 
-    const term = value.trim().toLowerCase();
+  useEffect(() => {
+    setSearchValue(filters.query ?? '');
+  }, [filters.query]);
+
+  useEffect(() => {
+    setRepoOptions(options.repos);
+    setGroupOptions(options.groups);
+  }, [options.repos, options.groups]);
+
+  // Quick debounce before hitting the suggestion endpoint so we don't spam requests while typing.
+  useEffect(() => {
+    const term = searchValue.trim();
     if (!term) {
-      setOptions([]);
+      setSuggestions([]);
       return;
     }
 
-    const seen = new Set<string>();
-    const matches: string[] = [];
-
-    for (const vuln of data) {
-      // grab interesting bits off each vuln so the user can find stuff quickly
-      const candidates = [
-        vuln.cve,
-        (vuln as any).package ?? (vuln as any).packageName,
-        vuln.repoName,
-        vuln.imageName,
-        vuln.groupName,
-        vuln.summary,
-        ...(Array.isArray(vuln.riskFactors)
-          ? vuln.riskFactors
-          : Object.keys(
-              (vuln.riskFactors as Record<string, unknown>) ?? {},
-            )),
-      ];
-
-      for (const raw of candidates) {
-        if (!raw) continue;
-        const text = String(raw).trim();
-        if (!text) continue;
-        if (!text.toLowerCase().includes(term)) continue;
-        if (seen.has(text)) continue;
-
-        seen.add(text);
-        matches.push(text);
-        if (matches.length === 10) break;
+    const handle = setTimeout(async () => {
+      try {
+        setFetchingSuggestions(true);
+        const results = await fetchSuggestions(term, 12);
+        setSuggestions(results);
+      } catch (err) {
+        console.error('Failed to fetch suggestions', err);
+      } finally {
+        setFetchingSuggestions(false);
       }
+    }, 250);
 
-      if (matches.length === 10) break;
-    }
+    return () => clearTimeout(handle);
+  }, [searchValue]);
 
-    setOptions(matches.map((value) => ({ value })));
-  };
+  const analysisActive = filters.kaiExclude.includes(ANALYSIS_STATUS);
+  const aiActive = filters.kaiExclude.includes(AI_ANALYSIS_STATUS);
 
   const handleSearchSubmit = (value: string) => {
-    dispatch(setQuery(value));
+    dispatch(setQuery(value.trim()));
   };
 
-  const analysisActive = kaiExclude.has('invalid - norisk');
-  const aiActive = kaiExclude.has('ai-invalid-norisk');
+  const handleKaiToggle = (statusValue: string) => {
+    dispatch(toggleKaiFilter(statusValue));
+  };
 
-  const activeChips = [
-    ...Array.from(kaiExclude).map((k) => ({ type: 'kai', label: k, value: k })),
-    ...Array.from(kaiStatuses).map((status) => ({
-      type: 'kaiStatus',
-      label: status || 'kai: (none)',
-      value: status,
-    })),
-    ...Array.from(severities).map((s) => ({ type: 'sev', label: s, value: s })),
-    ...Array.from(riskFactors).map((rf) => ({ type: 'rf', label: rf, value: rf })),
-    ...(dateRange ? [{ type: 'date', label: 'Date range' }] : []),
-    ...(cvssRange ? [{ type: 'cvss', label: `CVSS ${cvssRange[0]}-${cvssRange[1]}` }] : []),
-    ...(q ? [{ type: 'q', label: `q:“${q}”` }] : []),
-  ];
+  const handleSeverityToggle = (severity: string) => {
+    dispatch(toggleSeverity(severity));
+  };
 
-  const allRiskFactors = React.useMemo(() => {
-    const collected = new Set<string>();
-    data.forEach((v) => {
-      const list = Array.isArray(v.riskFactors)
-        ? v.riskFactors
-        : Object.keys((v.riskFactors as Record<string, unknown>) ?? {});
-      list.forEach((item) => collected.add(item));
-    });
-    return Array.from(collected).sort();
-  }, [data]);
+  const handleKaiStatusesChange = (values: string[]) => {
+    dispatch(setKaiStatuses(values));
+  };
 
-  const allKaiStatuses = React.useMemo(() => {
-    const collected = new Set<string>();
-    data.forEach((v) => {
-      const raw = (v.kaiStatus ?? '').toString();
-      if (raw) {
-        collected.add(raw);
-      }
-    });
-    return Array.from(collected).sort((a, b) => a.localeCompare(b));
-  }, [data]);
+  const handleRiskFactorChange = (values: string[]) => {
+    dispatch(setRiskFactors(values));
+  };
 
-  const handleDateRangeChange = (value: RangeValue<Dayjs>) => {
-    if (!value || value.length !== 2 || !value[0] || !value[1]) {
+  const handleRepoChange = (value: string | null) => {
+    dispatch(setRepoFilter(value));
+  };
+
+  const handleGroupChange = (value: string | null) => {
+    dispatch(setGroupFilter(value));
+  };
+
+  const handleDateRangeChange = (range: [Dayjs | null, Dayjs | null] | null) => {
+    if (!range || !range[0] || !range[1]) {
       dispatch(setDateRange(null));
       return;
     }
-    const [start, end] = value;
-    const range: DateRange = [start.startOf('day').valueOf(), end.endOf('day').valueOf()];
-    dispatch(setDateRange(range));
+    const [start, end] = range as [Dayjs, Dayjs];
+    dispatch(
+      setDateRange([
+        start.startOf('day').valueOf(),
+        end.endOf('day').valueOf(),
+      ]),
+    );
   };
 
-  const currentRange: RangeValue<Dayjs> = dateRange
-    ? [dayjs(dateRange[0]), dayjs(dateRange[1])]
+  const handleCvssSlider = (range: [number, number]) => {
+    dispatch(setCvssRange(range));
+  };
+
+  const handleCvssInput = (value: number | null, index: number) => {
+    const current = [...effectiveCvss] as [number, number];
+    const safe = value === null ? 0 : value;
+    if (index === 0) {
+      current[0] = Math.min(safe, current[1]);
+    } else {
+      current[1] = Math.max(safe, current[0]);
+    }
+    dispatch(setCvssRange(current));
+  };
+
+  const handleSortChange = (value: string) => {
+    dispatch(setSort({ sortBy: value as any, sortDirection: sort.sortDirection }));
+  };
+
+  const handleDirectionChange = (direction: 'asc' | 'desc') => {
+    dispatch(setSort({ sortBy: sort.sortBy, sortDirection: direction }));
+  };
+
+  const handleClear = () => {
+    dispatch(resetFilters());
+  };
+
+  const handleRefresh = () => {
+    dispatch(fetchVulnerabilities());
+  };
+
+  const handleExport = (type: 'csv' | 'json') => {
+    if (!rows.length) {
+      return;
+    }
+    if (type === 'csv') {
+      const blob = exportAsCsv(rows);
+      saveBlob(blob, 'vulnerabilities.csv');
+    } else {
+      const blob = exportAsJson(rows);
+      saveBlob(blob, 'vulnerabilities.json');
+    }
+  };
+
+  const activeChips = useMemo(() => {
+    // Gather every active filter into a single chip list so users can clear them quickly.
+    const chips: Array<{ key: string; label: string; onClose: () => void }> = [];
+    filters.kaiExclude.forEach((value) => {
+      chips.push({
+        key: `exclude-${value}`,
+        label: `Exclude ${value}`,
+        onClose: () => dispatch(toggleKaiFilter(value)),
+      });
+    });
+
+    filters.kaiStatuses.forEach((value) => {
+      chips.push({
+        key: `kai-${value}`,
+        label: `Kai: ${value}`,
+        onClose: () =>
+          dispatch(setKaiStatuses(filters.kaiStatuses.filter((statusValue) => statusValue !== value))),
+      });
+    });
+
+    filters.severities.forEach((value) => {
+      chips.push({
+        key: `severity-${value}`,
+        label: value,
+        onClose: () => dispatch(toggleSeverity(value)),
+      });
+    });
+
+    filters.riskFactors.forEach((value) => {
+      chips.push({
+        key: `risk-${value}`,
+        label: value,
+        onClose: () => dispatch(setRiskFactors(filters.riskFactors.filter((rf) => rf !== value))),
+      });
+    });
+
+    if (filters.repo) {
+      chips.push({
+        key: 'repo',
+        label: `Repo: ${filters.repo}`,
+        onClose: () => dispatch(setRepoFilter(null)),
+      });
+    }
+
+    if (filters.group) {
+      chips.push({
+        key: 'group',
+        label: `Group: ${filters.group}`,
+        onClose: () => dispatch(setGroupFilter(null)),
+      });
+    }
+
+    if (filters.dateRange) {
+      chips.push({
+        key: 'dateRange',
+        label: 'Published range',
+        onClose: () => dispatch(setDateRange(null)),
+      });
+    }
+
+    if (filters.cvssRange) {
+      chips.push({
+        key: 'cvss',
+        label: `CVSS ${filters.cvssRange[0]}–${filters.cvssRange[1]}`,
+        onClose: () => dispatch(setCvssRange(null)),
+      });
+    }
+
+    if (filters.query) {
+      chips.push({
+        key: 'query',
+        label: `q: “${filters.query}”`,
+        onClose: () => dispatch(setQuery('')),
+      });
+    }
+
+    return chips;
+  }, [dispatch, filters]);
+
+  const datePickerValue: [Dayjs, Dayjs] | null = filters.dateRange
+    ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]
     : null;
 
-  const currentCvss: CvssRange = cvssRange ?? DEFAULT_CVSS_RANGE;
+  type CvssRange = [number, number];
+  const DEFAULT_CVSS_RANGE: CvssRange = [0, 10];
 
+  // Clamp CVSS values to the expected 0–10 range.
+  const clampCvss = (value: number): number => {
+    const clamped = Math.min(10, Math.max(0, value));
+    return Math.round(clamped * 10) / 10;
+  };
 
+  // Normalise CVSS range so minimum stays below maximum and both stay in bounds.
+  const normaliseCvssRange = (range: CvssRange): CvssRange => {
+    let [min, max] = range;
+    min = clampCvss(min);
+    max = clampCvss(max);
+    if (min > max) [min, max] = [max, min];
+    return [min, max];
+  };
+
+  const isDefaultCvssRange = (range: CvssRange) =>
+    range[0] === DEFAULT_CVSS_RANGE[0] && range[1] === DEFAULT_CVSS_RANGE[1];
+
+  const currentCvss: CvssRange = filters.cvssRange ?? DEFAULT_CVSS_RANGE;
+
+  // Apply slider adjustments through the normalised CVSS range helper.
   const handleCvssChange = (value: number | number[]) => {
     if (!Array.isArray(value)) return;
-    // slider delivers floats so we clamp and normalise everything here
     const next = normaliseCvssRange(value as CvssRange);
     dispatch(setCvssRange(next));
   };
 
+  // Drop the CVSS filter when the slider returns to default bounds.
   const handleCvssAfterChange = (value: number | number[]) => {
     if (!Array.isArray(value)) return;
     const next = normaliseCvssRange(value as CvssRange);
@@ -221,151 +333,202 @@ export default function FilterBar() {
     }
   };
 
+  // Keep number inputs in sync with the slider while enforcing ordering and bounds.
   const handleCvssInputChange = (index: 0 | 1) => (val: number | null) => {
     if (typeof val !== 'number' || Number.isNaN(val)) return;
     const clamped = clampCvss(val);
     let next: CvssRange = [...currentCvss] as CvssRange;
     next[index] = clamped;
 
-    if (index === 0 && next[0] > next[1]) {
-      // if the left handle crosses we drag the other end with it
-      next[1] = clamped;
-    } else if (index === 1 && next[1] < next[0]) {
-      next[0] = clamped;
-    }
+    if (index === 0 && next[0] > next[1]) next[1] = clamped;
+    else if (index === 1 && next[1] < next[0]) next[0] = clamped;
 
     next = normaliseCvssRange(next);
-
-    if (isDefaultCvssRange(next)) {
-      dispatch(setCvssRange(null));
-    } else {
-      dispatch(setCvssRange(next));
-    }
-  };
-
-  const handleSortByChange = (value: string) => {
-    dispatch(setSortBy(value as SortOptionValue));
-  };
-
-  const handleSortDirectionChange = (value: string | number) => {
-    dispatch(setSortDirection(value as 'asc' | 'desc'));
-  };
-
-  const handleExport = async (format: 'csv' | 'json') => {
-    if (!filtered.length || exporting) return;
-    setExporting(format);
-    try {
-      // tiny delay gives the spinner a chance to render before the heavy work
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const blob = format === 'csv' ? exportAsCsv(filtered) : exportAsJson(filtered);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `vulnerabilities-${format}-${timestamp}.${format}`;
-      saveBlob(blob, filename);
-    } finally {
-      setExporting(null);
-    }
+    dispatch(isDefaultCvssRange(next) ? setCvssRange(null) : setCvssRange(next));
   };
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-        <Space wrap size="middle" align="center">
-          <AutoComplete
-            value={searchValue}
-            options={options}
-            style={{ width: SEARCH_WIDTH }}
-            onSearch={handleSearchChange}
-            onSelect={(value) => {
-              setSearchValue(value);
-              dispatch(setQuery(value));
-            }}
-            onChange={handleSearchChange}
+    <Space
+      direction="vertical"
+      size={16}
+      style={{
+        width: '100%',
+        background: '#ffffff',
+        borderRadius: 16,
+        border: '1px solid rgba(0, 0, 0, 0.06)',
+        padding: '18px 24px',
+        boxShadow: '0 8px 28px rgba(5, 10, 25, 0.08)',
+      }}
+    >
+      <Space
+        wrap
+        align="center"
+        style={{ width: '100%', gap: 12 }}
+      >
+        <AutoComplete
+          style={{
+            flex: '1',
+            minWidth: 320,
+            maxWidth: 520,
+          }}
+          value={searchValue}
+          options={suggestions.map((item) => ({
+            value: item.value,
+            label: (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <strong>{item.value}</strong>
+                {item.meta?.packageName && (
+                  <span style={{ fontSize: 12, color: '#667085' }}>
+                    Package • {item.meta.packageName}
+                  </span>
+                )}
+                {item.meta?.repoName && (
+                  <span style={{ fontSize: 12, color: '#667085' }}>
+                    Repo • {item.meta.repoName}
+                  </span>
+                )}
+              </div>
+            ),
+          }))}
+          onChange={setSearchValue}
+          onSearch={setSearchValue}
+          onSelect={(value) => {
+            setSearchValue(value);
+            handleSearchSubmit(value);
+          }}
+          notFoundContent={fetchingSuggestions ? 'Searching…' : null}
+        >
+          <Input.Search
+            allowClear
             placeholder="Search CVE, package, repo, risk factor..."
-            filterOption={false}
-            notFoundContent={
-              searchValue.trim()
-                ? `No matches for “${searchValue.trim()}”`
-                : null
-            }
+            enterButton="Search"
+            onSearch={handleSearchSubmit}
+            disabled={isLoading}
+          />
+        </AutoComplete>
+
+        <Tooltip title="Exclude Analysis (no risk)">
+          <Button
+            type={analysisActive ? 'primary' : 'default'}
+            onClick={() => handleKaiToggle(ANALYSIS_STATUS)}
+            disabled={isLoading}
           >
-            <Search
-              allowClear
-              enterButton="Search"
-              style={{ width: '100%' }}
-              onSearch={handleSearchSubmit}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-          </AutoComplete>
+            Analysis
+          </Button>
+        </Tooltip>
+        <Tooltip title="Exclude AI Analysis (no risk)">
+          <Button
+            type={aiActive ? 'primary' : 'default'}
+            onClick={() => handleKaiToggle(AI_ANALYSIS_STATUS)}
+            disabled={isLoading}
+          >
+            AI Analysis
+          </Button>
+        </Tooltip>
 
-          <Tooltip title='Exclude kaiStatus: "invalid - norisk"'>
-            <Button
-              type={analysisActive ? 'primary' : 'default'}
-              icon={<FilterOutlined />}
-              onClick={() => dispatch(toggleKaiFilter('invalid - norisk'))}
-            >
-              Analysis
-            </Button>
-          </Tooltip>
-
-          <Tooltip title='Exclude kaiStatus: "ai-invalid-norisk"'>
-            <Button
-              type={aiActive ? 'primary' : 'default'}
-              icon={<ThunderboltOutlined />}
-              onClick={() => dispatch(toggleKaiFilter('ai-invalid-norisk'))}
-            >
-              AI Analysis
-            </Button>
-          </Tooltip>
-
-          <Space size="small">
-            {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((sev) => (
+        <Space wrap size="small">
+          {severityConfigs.map((severity) => {
+            const active = filters.severities.includes(severity.value);
+            return (
               <Button
-                key={sev}
-                onClick={() => dispatch(toggleSeverity(sev))}
-                className={`severity-btn ${sev.toLowerCase()} ${
-                  severities.has(sev) ? 'active' : ''
-                }`}
+                key={severity.value}
+                type={active ? 'primary' : 'default'}
+                onClick={() => handleSeverityToggle(severity.value)}
+                style={{
+                  borderColor: severity.color,
+                  color: active ? '#fff' : severity.color,
+                  background: active ? severity.color : 'transparent',
+                }}
+                disabled={isLoading}
               >
-                {sev}
+                {severity.label}
               </Button>
-            ))}
-          </Space>
+            );
+          })}
         </Space>
+      </Space>
 
-        <Space wrap size="middle" align="center">
-          <Select
-            mode="multiple"
-            allowClear
-            placeholder="Risk factors"
-            style={{ minWidth: 220, maxWidth: 320 }}
-            value={Array.from(riskFactors)}
-            options={allRiskFactors.map((rf) => ({ label: rf, value: rf }))}
-            onChange={(values) => dispatch(setRiskFactors(values))}
-          />
+      <Space
+        wrap
+        align="center"
+        size={[12, 12]}
+        style={{ width: '100%' }}
+      >
+        <Select
+          mode="multiple"
+          allowClear
+          placeholder="Risk factors"
+          value={filters.riskFactors}
+          options={options.riskFactors.map((value) => ({ label: value, value }))}
+          onChange={handleRiskFactorChange}
+          style={{ minWidth: 220 }}
+          disabled={isLoading}
+        />
+        <Select
+          mode="multiple"
+          allowClear
+          placeholder="Kai status"
+          value={filters.kaiStatuses}
+          options={options.kaiStatuses.map((value) => ({ label: value, value }))}
+          onChange={handleKaiStatusesChange}
+          style={{ minWidth: 200 }}
+          disabled={isLoading}
+        />
+        <Select
+          showSearch
+          placeholder="Group"
+          allowClear
+          value={filters.group ?? undefined}
+          options={groupOptions.map((value) => ({ label: value, value }))}
+          onSearch={(input) => {
+            const term = input.trim().toLowerCase();
+            if (!term) {
+              setGroupOptions(options.groups);
+              return;
+            }
+            setGroupOptions(
+              options.groups.filter((value) =>
+                value.toLowerCase().includes(term),
+              ),
+            );
+          }}
+          filterOption={false}
+          onChange={(value) => handleGroupChange(value ?? null)}
+          style={{ minWidth: 180 }}
+          disabled={isLoading}
+        />
+        <Select
+          showSearch
+          placeholder="Repository"
+          allowClear
+          value={filters.repo ?? undefined}
+          options={repoOptions.map((value) => ({ label: value, value }))}
+          onSearch={(input) => {
+            const term = input.trim().toLowerCase();
+            if (!term) {
+              setRepoOptions(options.repos);
+              return;
+            }
+            setRepoOptions(
+              options.repos.filter((value) =>
+                value.toLowerCase().includes(term),
+              ),
+            );
+          }}
+          filterOption={false}
+          onChange={(value) => handleRepoChange(value ?? null)}
+          style={{ minWidth: 200 }}
+          disabled={isLoading}
+        />
+        <RangePicker
+          value={datePickerValue}
+          onChange={handleDateRangeChange}
+          allowClear
+          disabled={isLoading}
+          placeholder={[ 'Published from', 'Published to' ]}
+        />
 
-          <Select
-            allowClear
-            mode="multiple"
-            placeholder="Kai status"
-            style={{ minWidth: 180, maxWidth: 260 }}
-            value={Array.from(kaiStatuses)}
-            options={allKaiStatuses.map((status) => ({
-              label: status,
-              value: status,
-            }))}
-            onChange={(values) => dispatch(setKaiStatuses(values))}
-            notFoundContent="No kai statuses"
-          />
-
-          <RangePicker
-            value={currentRange}
-            onChange={handleDateRangeChange}
-            style={{ minWidth: 260 }}
-            allowEmpty={[true, true]}
-            placeholder={['Published from', 'Published to']}
-          />
-
-          <div
+                <div
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -408,121 +571,65 @@ export default function FilterBar() {
             />
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              minWidth: 260,
-              flexWrap: 'wrap',
-            }}
-          >
-            <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
-              Sort
-            </Text>
-            <Select
-              value={sortBy}
-              options={SORT_OPTIONS.map((opt) => ({
-                label: opt.label,
-                value: opt.value,
-              }))}
-              onChange={handleSortByChange}
-              style={{ width: 140 }}
-            />
-            <Segmented
-              value={sortDirection}
-              onChange={handleSortDirectionChange}
-              options={[
-                { label: 'Asc', value: 'asc' },
-                { label: 'Desc', value: 'desc' },
-              ]}
-              size="middle"
-            />
-          </div>
-
+        <Space size="small" align="center">
+          <Text type="secondary">Sort</Text>
+          <Select
+            value={sort.sortBy}
+            options={SORT_OPTIONS}
+            onChange={handleSortChange}
+            style={{ width: 140 }}
+            disabled={isLoading}
+          />
           <Button
-            danger
-            icon={<ClearOutlined />}
-            onClick={() => dispatch(clearAllFilters())}
+            type={sort.sortDirection === 'asc' ? 'primary' : 'default'}
+            onClick={() => handleDirectionChange('asc')}
+            disabled={isLoading}
           >
-            Clear All
-          </Button>
-
-          <Button
-            icon={<DownloadOutlined />}
-            loading={exporting === 'csv'}
-            disabled={!filtered.length}
-            onClick={() => handleExport('csv')}
-          >
-            Export CSV
+            Asc
           </Button>
           <Button
-            icon={<DownloadOutlined />}
-            loading={exporting === 'json'}
-            disabled={!filtered.length}
-            onClick={() => handleExport('json')}
+            type={sort.sortDirection === 'desc' ? 'primary' : 'default'}
+            onClick={() => handleDirectionChange('desc')}
+            disabled={isLoading}
           >
-            Export JSON
+            Desc
           </Button>
-
-          {q && (
-            <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
-              Showing <b>{filtered.length}</b> results for <b>{q}</b>
-            </Text>
-          )}
         </Space>
+
+        <Button onClick={handleClear} icon={null} danger>
+          Clear All
+        </Button>
+        <Button onClick={() => handleExport('csv')} disabled={!rows.length}>
+          Export CSV
+        </Button>
+        <Button onClick={() => handleExport('json')} disabled={!rows.length}>
+          Export JSON
+        </Button>
+        <Button onClick={handleRefresh} disabled={isLoading}>
+          Refresh
+        </Button>
       </Space>
 
       {activeChips.length > 0 && (
-        <>
-          <Divider style={{ margin: '12px 0' }} />
-          <Space size="small" wrap>
-            <Text type="secondary">Active Filters:</Text>
-            {activeChips.map((c, i) => (
-              <Tag
-                key={i}
-                color={
-                  c.type === 'kai'
-                    ? 'geekblue'
-                    : c.type === 'kaiStatus'
-                    ? 'cyan'
-                    : c.type === 'sev'
-                    ? 'volcano'
-                    : c.type === 'rf'
-                    ? 'purple'
-                    : c.type === 'cvss'
-                    ? 'magenta'
-                    : 'green'
-                }
-                closable
-                onClose={(e) => {
-                  e.preventDefault();
-                  const value = 'value' in c ? (c as any).value : c.label;
-                  if (c.type === 'kai') dispatch(toggleKaiFilter(value));
-                  else if (c.type === 'kaiStatus') {
-                    const next = new Set(kaiStatuses);
-                    next.delete(value);
-                    dispatch(setKaiStatuses(Array.from(next)));
-                  } else if (c.type === 'sev') dispatch(toggleSeverity(value));
-                  else if (c.type === 'rf') {
-                    const next = new Set(riskFactors);
-                    next.delete(value);
-                    dispatch(setRiskFactors(Array.from(next)));
-                  } else if (c.type === 'date') {
-                    dispatch(setDateRange(null));
-                  } else if (c.type === 'cvss') {
-                    dispatch(setCvssRange(null));
-                  } else {
-                    dispatch(setQuery(''));
-                  }
-                }}
-              >
-                {c.label}
-              </Tag>
-            ))}
-          </Space>
-        </>
+        <Space
+          wrap
+          size={[8, 8]}
+          style={{ marginTop: -4 }}
+        >
+          {activeChips.map((chip) => (
+            <Tag
+              key={chip.key}
+              closable
+              onClose={(e) => {
+                e.preventDefault();
+                chip.onClose();
+              }}
+            >
+              {chip.label}
+            </Tag>
+          ))}
+        </Space>
       )}
-    </div>
+    </Space>
   );
 }
