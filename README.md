@@ -111,6 +111,11 @@ Browser (React) ─┬─► REST API (Express)
 - **Shared access**: MongoDB lets multiple analysts hit the same dataset without each browser carrying a private copy.
 - **Server-side aggregations**: We lean on MongoDB pipelines to calculate risk-factor counts, trend lines, and highlights before data reaches the browser.
 
+### Why the API runs on Render (not Vercel functions)
+- The `/api/vulnerabilities` endpoint performs heavy aggregation over ~236k docs; serverless timeouts on Vercel’s hobby tier clipped responses.
+- Render keeps a warm Node process with no 10 s execution ceiling, so the API can stream full exports and cache connections to Atlas.
+- Frontend remains on Vercel—`VITE_API_URL` simply points to the Render Web Service (`https://security-vuln-dashboard.onrender.com/api`).
+
 ## Component Architecture & Data Flow
 
 ### FilterBar
