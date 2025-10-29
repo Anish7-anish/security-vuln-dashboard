@@ -9,11 +9,18 @@ dotenv.config();
 export function createApp() {
   const app = express();
 
-  app.use(
-    cors({
-      origin: process.env.CORS_ORIGIN?.split(',') ?? '*',
-    }),
-  );
+const resolveCorsOrigin = () => {
+  const raw = process.env.CORS_ORIGIN;
+  if (!raw || raw.trim() === '') return '*';
+  if (raw.trim() === '*') return '*';
+  return raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+};
+
+app.use(
+  cors({
+    origin: resolveCorsOrigin(),
+  }),
+);
   app.use(express.json({ limit: '1mb' }));
   app.use(morgan('tiny'));
 
