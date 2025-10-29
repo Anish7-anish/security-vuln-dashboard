@@ -119,7 +119,7 @@ export async function fetchSuggestions(term: string, limit = 12): Promise<Sugges
 
 export async function fetchAllVulnerabilities(
   params: FetchParams,
-  chunkSize = 5000,
+  chunkSize = 1000,
 ): Promise<Vulnerability[]> {
   const collected: Vulnerability[] = [];
   let page = params.page ?? 1;
