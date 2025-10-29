@@ -11,6 +11,7 @@ import {
   Tag,
   Tooltip,
   Typography,
+  message,
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -22,6 +23,7 @@ import {
   selectSort,
   selectStatus,
   selectIsRefreshing,
+  selectPagination,
 } from '../features/vulns/selectors';
 import {
   fetchVulnerabilities,
@@ -36,9 +38,10 @@ import {
   setSort,
   toggleKaiFilter,
   toggleSeverity,
+  buildFetchParams,
 } from '../features/vulns/slice';
-import { fetchSuggestions, type Suggestion } from '../data/api';
-import type { AppDispatch } from '../app/store';
+import { fetchSuggestions, fetchAllVulnerabilities, type Suggestion } from '../data/api';
+import type { AppDispatch, RootState } from '../app/store';
 import { exportAsCsv, exportAsJson, saveBlob } from '../utils/exportData';
 
 const { Text } = Typography;
@@ -78,12 +81,15 @@ export default function FilterBar() {
   const status = useSelector(selectStatus);
   const rows = useSelector(selectItems);
   const isRefreshing = useSelector(selectIsRefreshing);
+  const pagination = useSelector(selectPagination);
+  const fetchParams = useSelector((state: RootState) => buildFetchParams(state));
 
   const [searchValue, setSearchValue] = useState(filters.query ?? '');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
   const [repoOptions, setRepoOptions] = useState(options.repos);
   const [groupOptions, setGroupOptions] = useState(options.groups);
+  const [exporting, setExporting] = useState(false);
 
   const isLoading = status === 'loading' && !isRefreshing;
 
@@ -198,16 +204,38 @@ export default function FilterBar() {
     dispatch(fetchVulnerabilities());
   };
 
-  const handleExport = (type: 'csv' | 'json') => {
-    if (!rows.length) {
-      return;
-    }
-    if (type === 'csv') {
-      const blob = exportAsCsv(rows);
-      saveBlob(blob, 'vulnerabilities.csv');
-    } else {
-      const blob = exportAsJson(rows);
-      saveBlob(blob, 'vulnerabilities.json');
+  const handleExport = async (type: 'csv' | 'json') => {
+    if (!rows.length) return;
+    setExporting(true);
+    try {
+      let dataset = rows;
+      if (pagination.total > rows.length) {
+        const allRows = await fetchAllVulnerabilities({
+          ...fetchParams,
+          page: 1,
+          includeMetrics: false,
+        });
+        dataset = allRows;
+      }
+
+      if (!dataset.length) {
+        message.warning('No vulnerabilities to export with the current filters.');
+        return;
+      }
+
+      if (type === 'csv') {
+        const blob = exportAsCsv(dataset);
+        saveBlob(blob, 'vulnerabilities.csv');
+      } else {
+        const blob = exportAsJson(dataset);
+        saveBlob(blob, 'vulnerabilities.json');
+      }
+      message.success(`Exported ${dataset.length.toLocaleString()} records.`);
+    } catch (err) {
+      console.error('Failed to export vulnerabilities', err);
+      message.error('Failed to export vulnerabilities');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -599,10 +627,18 @@ export default function FilterBar() {
         <Button onClick={handleClear} icon={null} danger>
           Clear All
         </Button>
-        <Button onClick={() => handleExport('csv')} disabled={!rows.length}>
+        <Button
+          onClick={() => handleExport('csv')}
+          disabled={!rows.length || exporting}
+          loading={exporting}
+        >
           Export CSV
         </Button>
-        <Button onClick={() => handleExport('json')} disabled={!rows.length}>
+        <Button
+          onClick={() => handleExport('json')}
+          disabled={!rows.length || exporting}
+          loading={exporting}
+        >
           Export JSON
         </Button>
         <Button onClick={handleRefresh} disabled={isLoading}>

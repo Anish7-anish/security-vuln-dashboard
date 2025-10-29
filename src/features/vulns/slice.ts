@@ -112,7 +112,7 @@ const initialState: VulnState = {
   isRefreshing: false,
 };
 
-const selectFetchParams = (state: RootState): FetchParams => {
+export const buildFetchParams = (state: RootState): FetchParams => {
   const {
     page,
     pageSize,
@@ -155,7 +155,7 @@ export const fetchVulnerabilities = createAsyncThunk<
   { append?: boolean } | undefined,
   { state: RootState }
 >('vulns/fetch', async (arg, { getState }) => {
-  const params = selectFetchParams(getState());
+  const params = buildFetchParams(getState());
   return apiFetchVulnerabilities(params);
 });
 

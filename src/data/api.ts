@@ -19,6 +19,7 @@ export interface FetchParams {
   search?: string;
   sort?: string;
   direction?: 'asc' | 'desc';
+  includeMetrics?: boolean;
 }
 
 export interface VulnerabilityResponse {
@@ -26,7 +27,7 @@ export interface VulnerabilityResponse {
   page: number;
   limit: number;
   total: number;
-  metrics: {
+  metrics?: {
     severityCounts: Array<{ name: string; value: number }>;
     riskFactors: Array<{ name: string; value: number }>;
     trend: Array<{
@@ -43,7 +44,7 @@ export interface VulnerabilityResponse {
     repoSummary: Array<{ name: string; value: number }>;
     kpis: { total: number; remain: number; removed: number; pctRemain: number };
   };
-  options: {
+  options?: {
     kaiStatuses: string[];
     riskFactors: string[];
     repos: string[];
@@ -114,4 +115,30 @@ export async function fetchSuggestions(term: string, limit = 12): Promise<Sugges
   }
   const payload = await res.json();
   return payload?.suggestions ?? [];
+}
+
+export async function fetchAllVulnerabilities(
+  params: FetchParams,
+  chunkSize = 5000,
+): Promise<Vulnerability[]> {
+  const collected: Vulnerability[] = [];
+  let page = params.page ?? 1;
+  let total = Number.POSITIVE_INFINITY;
+
+  while (collected.length < total) {
+    const response = await fetchVulnerabilities({
+      ...params,
+      includeMetrics: params.includeMetrics ?? false,
+      page,
+      limit: chunkSize,
+    });
+    collected.push(...response.data);
+    total = response.total;
+    if (collected.length >= total || response.data.length === 0) {
+      break;
+    }
+    page += 1;
+  }
+
+  return collected;
 }
