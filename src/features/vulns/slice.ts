@@ -197,6 +197,13 @@ const vulnSlice = createSlice({
       recomputeFiltered(state);
     },
 
+    appendData: (state, action: PayloadAction<Vulnerability[]>) => {
+      const rows = action.payload ?? [];
+      if (!rows.length) return;
+      state.data.push(...rows);
+      recomputeFiltered(state);
+    },
+
     setQuery: (state, action: PayloadAction<string>) => {
       state.q = action.payload ?? '';
       recomputeFiltered(state);
@@ -270,6 +277,7 @@ const vulnSlice = createSlice({
 
 export const {
   setData,
+  appendData,
   setQuery,
   toggleKaiFilter,
   setKaiStatuses,

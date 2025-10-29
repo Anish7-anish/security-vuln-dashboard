@@ -84,6 +84,7 @@ let activeWorker: Worker | null = null;
 export async function streamIntoDB(
   urls: string[] | string,
   onProgress?: (count: number) => void,
+  onChunk?: (chunk: Vulnerability[]) => void,
 ) {
   if (activeWorker) {
     console.warn("⚠️ Worker already active, skipping duplicate run");
@@ -94,7 +95,20 @@ export async function streamIntoDB(
   const worker = new Worker(workerUrl, { type: 'module' });
   activeWorker = worker;
 
-  const sourceList = Array.isArray(urls) ? urls : [urls];
+  const baseOrigin =
+    (typeof window !== 'undefined' && window.location?.origin) ||
+    (typeof globalThis !== 'undefined' && (globalThis as any)?.location?.origin) ||
+    undefined;
+
+  const sourceList = (Array.isArray(urls) ? urls : [urls]).map((src) => {
+    if (typeof src !== 'string') return src;
+    if (!baseOrigin) return src;
+    try {
+      return new URL(src, baseOrigin).toString();
+    } catch {
+      return src;
+    }
+  });
   if (sourceList.length === 0) {
     activeWorker = null;
     throw new Error('No data sources provided for streamIntoDB');
@@ -106,10 +120,14 @@ export async function streamIntoDB(
       if (msg.type === 'chunk') {
         const tx = db.transaction(STORE, 'readwrite');
         const store = tx.store;
-        for (const item of msg.items) store.put(item);
+        const items = msg.items as Vulnerability[];
+        for (const item of items) store.put(item);
         await tx.done;
         if (typeof msg.progress === 'number') {
           onProgress?.(msg.progress);
+        }
+        if (items?.length) {
+          onChunk?.(items);
         }
       } 
       else if (msg.type === 'done') {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, Suspense, lazy, useRef } from 'react';
+import React, { useEffect, useState, useMemo, Suspense, lazy, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Layout,
@@ -15,7 +15,8 @@ import {
   Alert,
 } from 'antd';
 import { streamIntoDB, getAllVulnerabilities, DATA_SOURCES, EXPECTED_TOTAL } from '../data/loader';
-import { setData } from '../features/vulns/slice';
+import { appendData, setData } from '../features/vulns/slice';
+import type { Vulnerability } from '../data/types';
 import FilterBar from '../components/FilterBar';
 import VulnTable from '../components/VulnTable';
 import KPIs from '../components/KPIs';
@@ -91,6 +92,7 @@ export default function Dashboard() {
   const highlights = useSelector(selectCriticalHighlights);
 
   const [loading, setLoading] = useState(true);
+  const [streaming, setStreaming] = useState(false);
   const bootstrapped = useRef(false);
   const [progressCount, setProgressCount] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -107,6 +109,30 @@ export default function Dashboard() {
     }
   });
 
+  const seedBuffer = useRef<Vulnerability[]>([]);
+  const seededStore = useRef(false);
+  const INITIAL_SEED_COUNT = 5000;
+
+  const handleChunk = useCallback(
+    (rows: Vulnerability[]) => {
+      if (!rows?.length) return;
+
+      if (!seededStore.current) {
+        seedBuffer.current.push(...rows);
+        if (seedBuffer.current.length >= INITIAL_SEED_COUNT) {
+          dispatch(setData([...seedBuffer.current]));
+          seedBuffer.current = [];
+          seededStore.current = true;
+          setLoading(false);
+        }
+        return;
+      }
+
+      dispatch(appendData(rows));
+    },
+    [dispatch],
+  );
+
   useEffect(() => {
     // stash toggles so the layout sticks between page loads
     localStorage.setItem(PREFERENCE_KEY, JSON.stringify(preferences));
@@ -120,20 +146,36 @@ export default function Dashboard() {
       try {
         setLoadError(null);
         setCountMismatch(null);
+        seedBuffer.current = [];
+        seededStore.current = false;
 
         const stored = await getAllVulnerabilities();
-        if (stored.length === 0) {
-          try {
-            await streamIntoDB(DATA_SOURCES, (count) => setProgressCount(count));
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error("⚠️ Stream failed:", message);
-            setLoadError(message);
-          }
+        if (stored.length > 0) {
+          seededStore.current = true;
+          dispatch(setData(stored));
+          setLoading(false);
+          setProgressCount(null);
+          setStreaming(false);
+          return;
+        }
+
+        try {
+          setStreaming(true);
+          await streamIntoDB(
+            DATA_SOURCES,
+            (count) => setProgressCount(count),
+            (chunk) => handleChunk(chunk),
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("⚠️ Stream failed:", message);
+          setLoadError(message);
         }
 
         const data = await getAllVulnerabilities();
         dispatch(setData(data));
+        seededStore.current = true;
+        seedBuffer.current = [];
 
         if (data.length !== EXPECTED_TOTAL) {
           setCountMismatch(data.length);
@@ -147,9 +189,10 @@ export default function Dashboard() {
       } finally {
         setLoading(false);
         setProgressCount(null);
+        setStreaming(false);
       }
     })();
-  }, [dispatch]);
+  }, [dispatch, handleChunk]);
 
   const togglePreference = (key: keyof DashboardPreferences) => (checked: boolean) => {
     setPreferences((prev) => ({ ...prev, [key]: checked }));
@@ -236,6 +279,20 @@ export default function Dashboard() {
             showIcon
             message="Failed to stream vulnerability dataset"
             description={`The data worker stopped with: ${loadError}. Check your network connection or configure VITE_DATA_URL to a reachable JSON file.`}
+          />
+        )}
+
+        {streaming && !loading && (
+          <Alert
+            style={{ marginTop: 16 }}
+            type="info"
+            showIcon
+            message="Loading additional vulnerabilities"
+            description={
+              progressCount
+                ? `Streaming ${progressCount.toLocaleString()} of ~${EXPECTED_TOTAL.toLocaleString()} records…`
+                : 'Streaming remaining data in the background.'
+            }
           />
         )}
 

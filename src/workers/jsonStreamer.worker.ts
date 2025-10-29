@@ -109,7 +109,11 @@ async function readResponseBody(res: Response): Promise<ArrayBuffer> {
   return merged.buffer;
 }
 
-async function bufferToJson(buffer: ArrayBuffer, source: string): Promise<any> {
+async function bufferToJson(
+  buffer: ArrayBuffer,
+  source: string,
+  options?: { contentEncoding?: string | null },
+): Promise<any> {
   const view = new Uint8Array(buffer);
   const prefix = textDecoder.decode(view.subarray(0, Math.min(view.length, 80)));
 
@@ -121,13 +125,27 @@ async function bufferToJson(buffer: ArrayBuffer, source: string): Promise<any> {
 
   let dataBuffer = buffer;
   const lower = source.toLowerCase();
-  if (lower.endsWith(".gz") || lower.endsWith(".gzip")) {
+  const encoding = options?.contentEncoding?.toLowerCase();
+
+  const shouldDecompress =
+    encoding === "gzip" ||
+    encoding === "x-gzip" ||
+    lower.endsWith(".gz") ||
+    lower.endsWith(".gzip");
+
+  if (shouldDecompress) {
     if (typeof DecompressionStream === "undefined") {
-      throw new Error("Browser lacks gzip support (DecompressionStream unavailable).");
+      console.warn("gzip payload detected but DecompressionStream is unavailable; using raw buffer.");
+    } else {
+      try {
+        const stream = new Response(buffer).body?.pipeThrough(new DecompressionStream("gzip"));
+        if (!stream) throw new Error("Failed to create gzip decompression stream.");
+        dataBuffer = await new Response(stream).arrayBuffer();
+      } catch (err) {
+        console.warn("Failed to decompress gzip payload; falling back to raw bytes:", err);
+        dataBuffer = buffer;
+      }
     }
-    const stream = new Response(buffer).body?.pipeThrough(new DecompressionStream("gzip"));
-    if (!stream) throw new Error("Failed to create gzip decompression stream.");
-    dataBuffer = await new Response(stream).arrayBuffer();
   }
 
   const text = textDecoder.decode(dataBuffer);
@@ -153,7 +171,9 @@ async function loadJsonFromSources(
       }
 
       const buffer = await readResponseBody(res);
-      const data = await bufferToJson(buffer, candidate);
+      const data = await bufferToJson(buffer, candidate, {
+        contentEncoding: res.headers?.get?.("content-encoding"),
+      });
       return { data, source: candidate };
     } catch (err) {
       lastError = err;
@@ -219,7 +239,9 @@ async function streamFromManifest(manifest: Manifest, manifestUrl: string) {
     if (!res.ok) throw new Error(`Failed to fetch chunk (${res.status}) from ${chunkUrl}`);
 
     const chunkBuffer = await readResponseBody(res);
-    const chunkJson = await bufferToJson(chunkBuffer, chunkUrl);
+    const chunkJson = await bufferToJson(chunkBuffer, chunkUrl, {
+      contentEncoding: res.headers?.get?.("content-encoding"),
+    });
     const rows = Array.isArray(chunkJson?.rows) ? chunkJson.rows : [];
 
     for (const vuln of rows) {
